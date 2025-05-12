@@ -1,3 +1,4 @@
+ 
 import React, { useState, useRef, useMemo, forwardRef } from "react";
 import {
   Container,
@@ -49,7 +50,7 @@ import {
   QueryClientProvider,
   useQuery,
 } from "@tanstack/react-query";
-import html2pdf from "html2pdf.js";
+import { useReactToPrint } from "react-to-print";
 import { format, addWeeks, startOfWeek, endOfWeek } from "date-fns";
 import { api } from "../api";
 
@@ -585,36 +586,13 @@ function SchedulerInner() {
   }, [data, search]);
 
   // Export to PDF
-  const exportPDF = async () => {
-    if (isLoading) return;
+const handlePrint = useReactToPrint({
+  content: () => printRef.current,                         // REQUIRED
+  documentTitle: `schedule-${stage}-${format(weekDate,'yyyy-MM-dd')}`,
+  onAfterPrint: () => console.info("✅ جدول تم طباعته"),
+});
 
-    try {
-      // Define better options for RTL language support
-      const opt = {
-        margin: 10,
-        filename: `schedule-${stage}-${format(weekDate, "yyyy-MM-dd")}.pdf`,
-        image: { type: "jpeg", quality: 0.98 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          letterRendering: true, // Better text rendering
-        },
-        jsPDF: {
-          unit: "mm",
-          format: "a4",
-          orientation: "landscape",
-          compress: true,
-          hotfixes: ["px_scaling"], // Fixes scaling issues
-          putOnlyUsedFonts: true,
-        },
-      };
-
-      await html2pdf().set(opt).from(printRef.current).save();
-    } catch (err) {
-      console.error("Failed to export PDF:", err);
-    }
-  };
+  const canPrint = printRef.current && !isLoading && !isError;
 
   // Filter menu
   const openFilterMenu = (event) => setFilterAnchor(event.currentTarget);
@@ -675,9 +653,8 @@ function SchedulerInner() {
             <ListItem button onClick={goToday}>
               <ListItemText primary="اليوم" />
             </ListItem>
-            <ListItem button onClick={exportPDF}>
-              <ListItemText primary="تصدير PDF" />
-            </ListItem>
+            
+          
             <ListItem button onClick={refetch}>
               <ListItemText primary="تحديث" />
             </ListItem>
@@ -791,13 +768,14 @@ function SchedulerInner() {
               spacing={1}
               sx={{ display: { xs: "none", md: "flex" } }}
             >
-              <ActionButton
-                icon={<Download />}
-                label="تصدير PDF"
-                onClick={exportPDF}
-                disabled={isLoading}
-              />
-           
+              
+  <ActionButton
+  icon={<Download />}
+  label="طباعة"
+  onClick={handlePrint}
+  disabled={!canPrint}
+/>
+
               <ActionButton
                 icon={<Refresh />}
                 label="تحديث"
@@ -878,14 +856,15 @@ function SchedulerInner() {
       )}
 
       {/* Hidden printable element */}
-      <Box sx={{ position: "absolute", left: "-9999px", top: 0 }}>
-        <PrintableWeek
-          ref={printRef}
-          grouped={grouped}
-          stageLabel={currentStageLabel}
-          weekRange={weekFormatted}
-        />
-      </Box>
+<Box sx={{ position: 'absolute', top: 0, left: '-10000px' }}>
+  <PrintableWeek
+    ref={printRef}
+    grouped={grouped}
+    stageLabel={currentStageLabel}
+    weekRange={weekFormatted}
+  />
+</Box>
+
     </Container>
   );
 }

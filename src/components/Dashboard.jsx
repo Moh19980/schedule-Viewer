@@ -1,18 +1,26 @@
 import { useState } from 'react';
-import { Tabs, Tab, Paper, Box, Container, Typography } from '@mui/material';
-import { alpha } from '@mui/material/styles'; // For transparent colors
+import { Tabs, Tab, Paper, Box, Container, Typography, useTheme } from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import { keyframes } from '@emotion/react';
 
-// Import Icons for Tabs
+// Import Icons
 import EventNoteIcon from '@mui/icons-material/EventNote';
 import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
 import MeetingRoomIcon from '@mui/icons-material/MeetingRoom';
+import ListAltIcon from "@mui/icons-material/ListAlt";
 
-// Import your form components
+// Form Components
 import ScheduleForm from './ScheduleForm';
 import AddLecturerForm from './AddLecturerForm';
 import AddRoomForm from './AddRoomForm';
+import AllLecturere from './AllLecturere';
 
-// TabPanel component remains useful for structure and accessibility
+// Animation for tab transition
+const fadeIn = keyframes`
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
+
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
 
@@ -25,7 +33,10 @@ function TabPanel(props) {
       {...other}
     >
       {value === index && (
-        <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}> {/* Responsive padding for content */}
+        <Box sx={{ 
+          p: { xs: 2, sm: 3, md: 4 },
+          animation: `${fadeIn} 0.3s ease-out`
+        }}>
           {children}
         </Box>
       )}
@@ -33,7 +44,6 @@ function TabPanel(props) {
   );
 }
 
-// Helper function for accessibility props
 function a11yProps(index) {
   return {
     id: `dashboard-tab-${index}`,
@@ -43,120 +53,120 @@ function a11yProps(index) {
 
 export default function Dashboard() {
   const [tab, setTab] = useState(0);
+  const theme = useTheme();
 
   const handleTabChange = (event, newValue) => {
     setTab(newValue);
   };
 
   return (
-    <Container maxWidth="md" sx={{ mt: { xs: 3, md: 8 }, mb: 6 }}>
-      <Typography
-        variant="h3" // Slightly larger and more impactful title
-        component="h1"
-        gutterBottom
-        sx={{
-          textAlign: 'center',
-          mb: { xs: 3, md: 5 },
-          fontWeight: 700, // Bolder title
-          letterSpacing: '0.5px', // Adds a bit of refinement
-        }}
-      >
-        Management Hub {/* Changed title for a more "modern" feel */}
-      </Typography>
+    <Container maxWidth="lg" sx={{ 
+      mt: { xs: 3, md: 8 }, 
+      mb: 6,
+      transition: 'all 0.3s ease'
+    }}>
+      <Box sx={{ textAlign: 'center', mb: { xs: 4, md: 6 } }}>
+        <Typography
+          variant="h3"
+          component="h1"
+          sx={{
+            fontWeight: 800,
+            letterSpacing: '-0.5px',
+            background: `linear-gradient(45deg, ${theme.palette.primary.main} 30%, ${theme.palette.secondary.main} 90%)`,
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            mb: 1.5,
+            [theme.breakpoints.down('md')]: {
+              fontSize: '2.5rem'
+            }
+          }}
+        >
+          Management Hub
+        </Typography>
+        <Typography
+          variant="subtitle1"
+          sx={{
+            color: 'text.secondary',
+            maxWidth: 600,
+            mx: 'auto',
+            lineHeight: 1.6
+          }}
+        >
+          Manage schedules, lecturers, and rooms with our intuitive administration tools
+        </Typography>
+      </Box>
 
       <Paper
-        variant="outlined" // Outlined variant for a cleaner, modern look
+        elevation={4}
         sx={{
-          borderRadius: 4, // Slightly more pronounced border radius
-          // bgcolor: (theme) => alpha(theme.palette.background.default, 0.5) // Optional: subtle background tint
+          borderRadius: 4,
+          background: `linear-gradient(145deg, ${alpha(theme.palette.background.paper, 0.95)}, ${theme.palette.background.paper})`,
+          backdropFilter: 'blur(8px)',
+          border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+          boxShadow: theme.shadows[4]
         }}
       >
-        <Box sx={{ display: 'flex', justifyContent: 'center', p: 1.5, borderBottom: 1, borderColor: 'divider' }}>
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'center',
+          p: 1.5,
+          background: alpha(theme.palette.background.default, 0.4),
+          borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+          borderRadius: '16px 16px 0 0'
+        }}>
           <Tabs
             value={tab}
             onChange={handleTabChange}
-            aria-label="Modern dashboard tabs"
-            TabIndicatorProps={{
-              sx: { display: 'none' } // Hide the default indicator line
-            }}
+            aria-label="Dashboard tabs"
+            variant="scrollable"
+            scrollButtons="auto"
+            TabIndicatorProps={{ sx: { display: 'none' } }}
             sx={{
-              // Style for the Tabs container itself if needed
+              '& .MuiTabs-flexContainer': {
+                gap: 1,
+              }
             }}
           >
-            <Tab
-              icon={<EventNoteIcon />}
-              iconPosition="start"
-              label="Schedule" // Shorter label
-              {...a11yProps(0)}
-              sx={(theme) => ({
-                textTransform: 'none', // More natural casing
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                borderRadius: '20px', // Pill shape
-                px: 2.5, // Horizontal padding for the pill
-                py: 1,   // Vertical padding for the pill
-                mr: 1,   // Margin between tabs
-                minHeight: 'auto',
-                color: theme.palette.text.secondary,
-                '&.Mui-selected': {
-                  backgroundColor: theme.palette.primary.main,
-                  color: theme.palette.primary.contrastText,
-                  boxShadow: `0 2px 8px ${alpha(theme.palette.primary.main, 0.3)}`,
-                },
-                '&:not(.Mui-selected):hover': {
-                  backgroundColor: alpha(theme.palette.action.hover, 0.6),
-                },
-              })}
-            />
-            <Tab
-              icon={<PersonAddAlt1Icon />}
-              iconPosition="start"
-              label="Lecturers" // Shorter label
-              {...a11yProps(1)}
-              sx={(theme) => ({
-                textTransform: 'none',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                borderRadius: '20px',
-                px: 2.5,
-                py: 1,
-                mr: 1,
-                minHeight: 'auto',
-                color: theme.palette.text.secondary,
-                '&.Mui-selected': {
-                  backgroundColor: theme.palette.primary.main,
-                  color: theme.palette.primary.contrastText,
-                  boxShadow: `0 2px 8px ${alpha(theme.palette.primary.main, 0.3)}`,
-                },
-                '&:not(.Mui-selected):hover': {
-                  backgroundColor: alpha(theme.palette.action.hover, 0.6),
-                },
-              })}
-            />
-            <Tab
-              icon={<MeetingRoomIcon />}
-              iconPosition="start"
-              label="Rooms" // Shorter label
-              {...a11yProps(2)}
-              sx={(theme) => ({
-                textTransform: 'none',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                borderRadius: '20px',
-                px: 2.5,
-                py: 1,
-                minHeight: 'auto',
-                color: theme.palette.text.secondary,
-                '&.Mui-selected': {
-                  backgroundColor: theme.palette.primary.main,
-                  color: theme.palette.primary.contrastText,
-                  boxShadow: `0 2px 8px ${alpha(theme.palette.primary.main, 0.3)}`,
-                },
-                '&:not(.Mui-selected):hover': {
-                  backgroundColor: alpha(theme.palette.action.hover, 0.6),
-                },
-              })}
-            />
+            {[
+              { icon: <EventNoteIcon />, label: 'Schedule' },
+              { icon: <PersonAddAlt1Icon />, label: 'Lecturers' },
+              { icon: <MeetingRoomIcon />, label: 'Rooms' },
+              { icon: <ListAltIcon />, label: "Lecturer List" },
+
+            ].map((tabConfig, index) => (
+              <Tab
+                key={index}
+                icon={tabConfig.icon}
+                iconPosition="start"
+                label={tabConfig.label}
+                {...a11yProps(index)}
+                sx={{
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  fontSize: '0.95rem',
+                  borderRadius: '12px',
+                  px: 3,
+                  py: 1,
+                  minHeight: 'auto',
+                  transition: 'all 0.2s ease',
+                  color: theme.palette.text.secondary,
+                  '&.Mui-selected': {
+                    background: `linear-gradient(45deg, ${theme.palette.primary.main} 0%, ${alpha(theme.palette.primary.main, 0.8)} 100%)`,
+                    color: theme.palette.primary.contrastText,
+                    boxShadow: theme.shadows[2],
+                    transform: 'scale(1.02)'
+                  },
+                  '&:hover': {
+                    background: alpha(theme.palette.action.hover, 0.1),
+                    color: theme.palette.text.primary
+                  },
+                  '&.Mui-selected:hover': {
+                    background: alpha(theme.palette.primary.dark, 0.9),
+                    transform: 'scale(1.05)'
+                  }
+                }}
+              />
+            ))}
           </Tabs>
         </Box>
 
@@ -168,6 +178,9 @@ export default function Dashboard() {
         </TabPanel>
         <TabPanel value={tab} index={2}>
           <AddRoomForm />
+        </TabPanel>
+        <TabPanel value={tab} index={3}>
+          <AllLecturere />
         </TabPanel>
       </Paper>
     </Container>
