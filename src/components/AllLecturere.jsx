@@ -1,421 +1,306 @@
-/* eslint-disable no-unused-vars */
-import { useEffect, useState } from "react";
+/* LecturerList.js — full working version
+   • React 18 / MUI 5
+   • Talks to /lecturers?limit=…&next=…&prev=…
+------------------------------------------------------------------ */
+import { useEffect, useState, useCallback } from 'react';
 import {
   Box,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Typography,
-  CircularProgress,
-  Alert,
-  TextField,
-  InputAdornment,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  DialogActions,
-  Button,
-  MenuItem,
-  Select,
-  OutlinedInput,
-  Checkbox,
-  FormControl,
-  InputLabel,
-  Tooltip,
-  Chip,
-  Avatar,
-  useMediaQuery,
-  useTheme,
-} from "@mui/material";
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  Paper, Avatar, Chip, Typography, CircularProgress, Alert,
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  TextField, InputAdornment, IconButton, Tooltip, Button,
+  useTheme, useMediaQuery, Select, MenuItem, FormControl, InputLabel
+  
+} from '@mui/material';
 import {
-  Person,
-  Search,
-  Delete,
-  Edit,
-  Warning,
-  ManageAccounts,
-} from "@mui/icons-material";
-const validDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"];
-import { api } from "../api";
+  Search, Delete, Edit, Warning, Person,
+  ArrowBack, ArrowForward
+} from '@mui/icons-material';
+import { api } from '../api';
+
+const validDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'];
 
 export default function LecturerList() {
+  /* ---------------- state ---------------- */
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const [lecturers, setLecturers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedLecturer, setSelectedLecturer] = useState(null);
-  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
-  const [openEditDialog, setOpenEditDialog] = useState(false);
-  const [editedDaysOff, setEditedDaysOff] = useState([]);
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  useEffect(() => {
-    fetchLecturers();
-  }, []);
-
-  const fetchLecturers = async () => {
+  const [lecturers, setLecturers]  = useState([]);
+  const [loading,   setLoading]    = useState(true);
+  const [error,     setError]      = useState('');
+  const [search,    setSearch]     = useState('');
+  const [limit,     setLimit]      = useState(5);      // page size selector
+  const [offset,    setOffset]     = useState(0);      // current offset
+  const [nextOff,   setNextOff]    = useState(null);   // from API
+  const [prevOff,   setPrevOff]    = useState(null);   // from API
+const [openEditDialog, setOpenEditDialog] = useState(false);
+const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+const [selectedLecturer, setSelectedLecturer] = useState(null);
+const [editedLecturer, setEditedLecturer] = useState(null);
+  /* ---------------- fetch ---------------- */
+  const fetchLecturers = useCallback(async (off = 0, lim = limit) => {
     try {
-      const response = await api.get("/lecturers");
-      setLecturers(response.data);
+      setLoading(true);
+      const q = [`limit=${lim}`];
+      if (off > 0) q.push(`next=${off}`);
+      const { data } = await api.get(`/lecturers?${q.join('&')}`);
+      setLecturers(data.data);
+      setNextOff(data.next);
+      setPrevOff(data.prev);
+      setOffset(off);
+      setError('');
+    } catch (e) {
+      console.error(e);
+      setError('Failed to fetch lecturers');
+    } finally {
       setLoading(false);
-    } catch (err) {
-      setError("Failed to fetch lecturers");
-      setLoading(false);
     }
-  };
+  }, [limit]);
 
-  const handleOpenDeleteDialog = (lecturer) => {
-    setSelectedLecturer(lecturer);
-    setOpenDeleteDialog(true);
-  };
+  useEffect(() => { fetchLecturers(0, limit); }, [limit, fetchLecturers]);
 
-  const handleOpenEditDialog = (lecturer) => {
-    setSelectedLecturer(lecturer);
-    setEditedDaysOff(lecturer.day_offs || []);
-    setOpenEditDialog(true);
-  };
+  /* ---------------- pagination handlers ---------------- */
+  const handleNext = () => nextOff != null && fetchLecturers(nextOff);
+  const handlePrev = () => prevOff != null && fetchLecturers(prevOff);
 
-  const handleCloseDialogs = () => {
-    setSelectedLecturer(null);
-    setOpenDeleteDialog(false);
-    setOpenEditDialog(false);
-  };
-
-  const handleDelete = async () => {
-    try {
-      await api.delete(`/lecturers/${selectedLecturer.id}`);
-      setLecturers(lecturers.filter((lec) => lec.id !== selectedLecturer.id));
-      handleCloseDialogs();
-    } catch (err) {
-      console.error("Error deleting lecturer:", err);
-    }
-  };
-
-  const handleEdit = async () => {
-    try {
-      await api.put(`/lecturers/${selectedLecturer.id}/day-offs`, {
-        day_offs: editedDaysOff,
-      });
-      fetchLecturers();
-      handleCloseDialogs();
-    } catch (err) {
-      console.error("Error updating days off:", err);
-    }
-  };
-
-  const filteredLecturers = lecturers.filter((lecturer) =>
-    lecturer.name.toLowerCase().includes(searchQuery.toLowerCase())
+  /* ---------------- filtered view ---------------- */
+  const filtered = lecturers.filter(l =>
+    l.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  if (loading) {
-    return (
-      <Box sx={{ display: "flex", justifyContent: "center", mt: 4, gap: 2 }}>
-        <CircularProgress />
-        <Typography variant="body1" color="textSecondary">
-          Loading lecturers...
-        </Typography>
-      </Box>
-    );
-  }
+  /* ---------------- render helpers ---------------- */
+  const dayChips = (list=[]) => (
+    list.length
+      ? validDays.map(day => (
+          <Chip
+            key={day}
+            label={day}
+            size="small"
+            sx={{ mr: .5, mb: .5 }}
+            color={list.includes(day) ? 'default' : 'primary'}
+            variant={list.includes(day) ? 'outlined' : 'filled'}
+          />
+        ))
+      : <Chip label="Available all days" size="small" color="success" />
+  );
+const handleOpenEditDialog = (lecturer) => {
+  setSelectedLecturer(lecturer);
+  setEditedLecturer({ ...lecturer });
+  setOpenEditDialog(true);
+};
 
-  if (error) {
-    return (
-      <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
-        <Alert severity="error" sx={{ width: "100%", maxWidth: 500 }}>
-          {error}
-        </Alert>
-      </Box>
-    );
+const handleOpenDeleteDialog = (lecturer) => {
+  setSelectedLecturer(lecturer);
+  setOpenDeleteDialog(true);
+};
+
+const handleCloseDialogs = () => {
+  setOpenEditDialog(false);
+  setOpenDeleteDialog(false);
+  setSelectedLecturer(null);
+  setEditedLecturer(null);
+};
+
+const handleEdit = async () => {
+  try {
+    await api.put(`/lecturers/${editedLecturer.id}/day-offs`, {
+      day_offs: editedLecturer.day_offs,
+    });
+    fetchLecturers(offset, limit);
+    handleCloseDialogs();
+  } catch (err) {
+    console.error("Error updating lecturer:", err);
   }
+};
+
+const handleDelete = async () => {
+  try {
+    await api.delete(`/lecturers/${selectedLecturer.id}`);
+    fetchLecturers(offset, limit);
+    handleCloseDialogs();
+  } catch (err) {
+    console.error("Error deleting lecturer:", err);
+  }
+};
+  /* ---------------- main render ---------------- */
+  if (loading) return (
+    <Box sx={{ textAlign:'center', mt:6 }}>
+      <CircularProgress /><Typography sx={{ mt:1 }}>Loading …</Typography>
+    </Box>
+  );
+  if (error) return (
+    <Alert severity="error" sx={{ mt:4, maxWidth:480, mx:'auto' }}>{error}</Alert>
+  );
 
   return (
-    <Box sx={{ mt: 3, p: isMobile ? 1 : 3 }}>
-      <Box sx={{ mb: 4, textAlign: "center" }}>
-        <ManageAccounts sx={{ fontSize: 40, color: "primary.main", mb: 1 }} />
-        <Typography
-          variant="h4"
-          sx={{
-            fontWeight: "bold",
-            color: "text.primary",
-            letterSpacing: 1,
-          }}
-        >
-          Lecturers Management
+    <Box sx={{ p:isMobile?1:3 }}>
+      {/* header & search */}
+      <Box sx={{
+        display:'flex', flexDirection:isMobile?'column':'row',
+        justifyContent:'space-between', alignItems:isMobile?'stretch':'center',
+        mb:3, gap:2
+      }}>
+        <Typography variant="h5" fontWeight="bold">
+          Lecturers&nbsp;
+          <Chip label={filtered.length} color="primary" size="small" />
         </Typography>
-        <Typography variant="body1" color="textSecondary" sx={{ mt: 1 }}>
-          Manage lecturer information and availability
-        </Typography>
-      </Box>
 
-      <Box sx={{ mb: 3, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <Typography variant="h6" color="textSecondary">
-          {filteredLecturers.length} Lecturers Found
-        </Typography>
         <TextField
-          placeholder="Search lecturers..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
           size="small"
+          placeholder="Search lecturers…"
+          value={search}
+          onChange={e=>setSearch(e.target.value)}
           InputProps={{
-            startAdornment: (
+            startAdornment:(
               <InputAdornment position="start">
                 <Search color="action" />
               </InputAdornment>
             ),
-            sx: { borderRadius: 5, bgcolor: "background.paper" },
+            sx:{ borderRadius:5 }
           }}
-          sx={{ width: isMobile ? "100%" : 320 }}
+          sx={{ width:isMobile?'100%':300 }}
         />
       </Box>
 
-      <TableContainer
-        component={Paper}
-        sx={{
-          borderRadius: 2,
-          border: `1px solid ${theme.palette.divider}`,
-          boxShadow: theme.shadows[3],
-        }}
-      >
+      {/* table */}
+      <TableContainer component={Paper} sx={{ borderRadius:2, maxHeight:500 }}>
         <Table stickyHeader>
           <TableHead>
             <TableRow>
-              <TableCell sx={{ bgcolor: "background.paper", fontWeight: "bold", py: 2 }}>
-                Lecturer
-              </TableCell>
-              <TableCell sx={{ bgcolor: "background.paper", fontWeight: "bold", py: 2 }}>
-                Availability
-              </TableCell>
-              <TableCell sx={{ bgcolor: "background.paper", fontWeight: "bold", py: 2, textAlign: "center" }}>
-                Actions
-              </TableCell>
+              <TableCell>Lecturer</TableCell>
+              <TableCell>Availability</TableCell>
+              <TableCell align="center">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {filteredLecturers.map((lecturer) => (
-              <TableRow
-                key={lecturer.id}
-                hover
-                sx={{ "&:last-child td, &:last-child th": { border: 0 } }}
-              >
-                <TableCell sx={{ py: 2 }}>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                    <Avatar sx={{ bgcolor: "primary.main" }}>
-                      <Person />
-                    </Avatar>
-                    <Typography variant="body1" fontWeight="medium">
-                      {lecturer.name}
-                    </Typography>
+            {filtered.map(row=>(
+              <TableRow key={row.id} hover>
+                <TableCell>
+                  <Box sx={{ display:'flex', alignItems:'center', gap:2 }}>
+                    <Avatar sx={{ bgcolor:'primary.main' }}><Person/></Avatar>
+                    {row.name}
                   </Box>
                 </TableCell>
-                <TableCell sx={{ py: 2 }}>
-                  {lecturer.day_offs?.length ? (
-                    <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-                      {validDays.map((day) => (
-                        <Chip
-                          key={day}
-                          label={day}
-                          color={lecturer.day_offs.includes(day) ? "default" : "primary"}
-                          variant={lecturer.day_offs.includes(day) ? "outlined" : "filled"}
-                          size="small"
-                        />
-                      ))}
-                    </Box>
-                  ) : (
-                    <Chip label="Available all days" color="success" size="small" />
-                  )}
-                </TableCell>
-                <TableCell sx={{ py: 2, textAlign: "center" }}>
-                  <Box sx={{ display: "flex", justifyContent: "center", gap: 1 }}>
-                    <Tooltip title="Edit availability">
-                      <IconButton
-                        color="primary"
-                        onClick={() => handleOpenEditDialog(lecturer)}
-                        sx={{ "&:hover": { bgcolor: "primary.light" } }}
-                      >
-                        <Edit />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Delete lecturer">
-                      <IconButton
-                        color="error"
-                        onClick={() => handleOpenDeleteDialog(lecturer)}
-                        sx={{ "&:hover": { bgcolor: "error.light" } }}
-                      >
-                        <Delete />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
+                <TableCell>{dayChips(row.day_offs)}</TableCell>
+                <TableCell align="center">
+                  {/* dummy actions – hook up your edit/delete handlers here */}
+<TableCell align="center">
+  <Tooltip title="Edit availability">
+    <IconButton
+      onClick={() => handleOpenEditDialog(row)}
+      sx={{ color: 'primary.main' }}
+    >
+      <Edit />
+    </IconButton>
+  </Tooltip>
+
+  <Tooltip title="Delete lecturer">
+    <IconButton
+      onClick={() => handleOpenDeleteDialog(row)}
+      sx={{ color: 'error.main' }}
+    >
+      <Delete />
+    </IconButton>
+  </Tooltip>
+</TableCell>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-        {filteredLecturers.length === 0 && (
-          <Box sx={{ p: 4, textAlign: "center" }}>
-            <Typography variant="body1" color="textSecondary">
-              No lecturers found matching your search
-            </Typography>
-          </Box>
-        )}
       </TableContainer>
 
-      {/* Delete Dialog */}
-      <Dialog open={openDeleteDialog} onClose={handleCloseDialogs}>
-        <Box sx={{ p: 2 }}>
-          <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <Warning color="error" />
-            Confirm Deletion
-          </DialogTitle>
-          <DialogContent>
-            <DialogContentText>
-              Are you sure you want to permanently delete{" "}
-              <strong>{selectedLecturer?.name}</strong>? This action cannot be undone.
-            </DialogContentText>
-          </DialogContent>
-          <DialogActions sx={{ gap: 2 }}>
-            <Button
-              onClick={handleCloseDialogs}
-              variant="outlined"
-              sx={{ borderRadius: 2 }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleDelete}
-              color="error"
-              variant="contained"
-              sx={{ borderRadius: 2 }}
-            >
-              Confirm Delete
-            </Button>
-          </DialogActions>
+      {/* footer pagination bar */}
+      <Box sx={{
+        mt:2, display:'flex', alignItems:'center', justifyContent:'space-between',
+        flexWrap:'wrap', gap:2
+      }}>
+        {/* limit selector */}
+        <FormControl size="small">
+          <InputLabel>Rows</InputLabel>
+          <Select
+            value={limit}
+            label="Rows"
+            onChange={e=>setLimit(Number(e.target.value))}
+            sx={{ minWidth:80 }}
+          >
+            {[3,5,10,20,40].map(n=>(
+              <MenuItem key={n} value={n}>{n}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        {/* Prev / Next */}
+        <Box sx={{ ml:'auto', display:'flex', alignItems:'center', gap:1 }}>
+          <Button
+            startIcon={<ArrowBack/>}
+            disabled={prevOff==null}
+            onClick={handlePrev}
+          >
+            Prev
+          </Button>
+
+          {/* current page chip */}
+          <Chip
+            label={Math.floor(offset/limit)+1}
+            variant="outlined"
+            sx={{ fontWeight:'bold' }}
+          />
+
+          <Button
+            endIcon={<ArrowForward/>}
+            disabled={nextOff==null}
+            onClick={handleNext}
+          >
+            Next
+          </Button>
         </Box>
-      </Dialog>
+      </Box>
+      <Dialog open={openEditDialog} onClose={handleCloseDialogs} maxWidth="sm" fullWidth>
+  <DialogTitle>Edit Lecturer</DialogTitle>
+  <DialogContent>
+    <TextField
+      fullWidth
+      label="Lecturer Name"
+      value={editedLecturer?.name || ""}
+      onChange={(e) =>
+        setEditedLecturer({ ...editedLecturer, name: e.target.value })
+      }
+      sx={{ mb: 2 }}
+    />
 
-      {/* Edit Dialog */}
-   <Dialog
-  open={openEditDialog}
-  onClose={handleCloseDialogs}
-  fullWidth
-  maxWidth="sm"
-  sx={{
-    "& .MuiDialog-paper": {
-      borderRadius: 3,
-      p: { xs: 2, md: 3 },
-      boxShadow: 6,
-    },
-  }}
->
-  <DialogTitle
-    sx={{
-      textAlign: "center",
-      fontWeight: "bold",
-      fontSize: { xs: "1.2rem", md: "1.4rem" },
-      color: "text.primary",
-      borderBottom: `1px solid ${theme.palette.divider}`,
-      mb: 2,
-    }}
-  >
-    Edit Availability
-  </DialogTitle>
-
-  <DialogContent
-    sx={{
-      display: "flex",
-      flexDirection: "column",
-      gap: 2,
-      py: 2,
-      px: { xs: 2, md: 3 },
-    }}
-  >
     <FormControl fullWidth>
-      <InputLabel>Select Days Off</InputLabel>
+      <InputLabel>Days Off</InputLabel>
       <Select
         multiple
-        value={editedDaysOff}
-        onChange={(e) => setEditedDaysOff(e.target.value)}
-        input={<OutlinedInput label="Select Days Off" />}
-        renderValue={(selected) => (
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-            {selected.map((day) => (
-              <Chip
-                key={day}
-                label={day}
-                size="small"
-                sx={{
-                  bgcolor: theme.palette.primary.light,
-                  color: theme.palette.primary.contrastText,
-                  "&:hover": {
-                    bgcolor: theme.palette.primary.main,
-                  },
-                }}
-              />
-            ))}
-          </Box>
-        )}
-        MenuProps={{
-          PaperProps: {
-            sx: {
-              bgcolor: "background.paper",
-              borderRadius: 2,
-              boxShadow: 4,
-            },
-          },
-        }}
+        value={editedLecturer?.day_offs || []}
+        onChange={(e) =>
+          setEditedLecturer({ ...editedLecturer, day_offs: e.target.value })
+        }
+        renderValue={(selected) => selected.join(", ")}
       >
         {validDays.map((day) => (
           <MenuItem key={day} value={day}>
-            <Checkbox checked={editedDaysOff.includes(day)} />
             {day}
           </MenuItem>
         ))}
       </Select>
     </FormControl>
   </DialogContent>
-
-  <DialogActions
-    sx={{
-      borderTop: `1px solid ${theme.palette.divider}`,
-      px: { xs: 2, md: 3 },
-      py: 2,
-      justifyContent: "space-between",
-    }}
-  >
-    <Button
-      onClick={handleCloseDialogs}
-      variant="outlined"
-      sx={{
-        borderRadius: 2,
-        color: theme.palette.text.secondary,
-        borderColor: theme.palette.divider,
-        "&:hover": {
-          borderColor: theme.palette.primary.main,
-          color: theme.palette.primary.main,
-        },
-      }}
-    >
-      Discard
-    </Button>
-
-    <Button
-      onClick={handleEdit}
-      variant="contained"
-      sx={{
-        borderRadius: 2,
-        bgcolor: theme.palette.primary.main,
-        "&:hover": {
-          bgcolor: theme.palette.primary.dark,
-        },
-      }}
-    >
-      Save
+  <DialogActions>
+    <Button onClick={handleCloseDialogs}>Cancel</Button>
+    <Button onClick={handleEdit} variant="contained">Save</Button>
+  </DialogActions>
+</Dialog>
+<Dialog open={openDeleteDialog} onClose={handleCloseDialogs}>
+  <DialogTitle>Delete Lecturer</DialogTitle>
+  <DialogContent>
+    Are you sure you want to delete <strong>{selectedLecturer?.name}</strong>?
+  </DialogContent>
+  <DialogActions>
+    <Button onClick={handleCloseDialogs}>Cancel</Button>
+    <Button onClick={handleDelete} variant="contained" color="error">
+      Delete
     </Button>
   </DialogActions>
 </Dialog>

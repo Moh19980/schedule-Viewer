@@ -38,14 +38,19 @@ export default function ScheduleForm() {
   });
 
   /* Fetch rooms and lecturers */
-  useEffect(() => {
-    Promise.all([api.get("/rooms"), api.get("/lecturers")]).then(
-      ([roomsRes, lecturersRes]) => {
-        setRooms(roomsRes.data);
-        setLecturers(lecturersRes.data);
-      }
-    );
-  }, []);
+ useEffect(() => {
+  Promise.all([api.get("/rooms"), api.get("/lecturers")]).then(
+    ([roomsRes, lecturersRes]) => {
+      setRooms(roomsRes.data);
+      setLecturers(lecturersRes.data.data || []);  // Safeguard for unexpected structures
+    }
+  ).catch((err) => {
+    console.error("Error fetching rooms or lecturers:", err);
+    setLecturers([]);
+    setRooms([]);
+  });
+}, []);
+
 
   const handleSnackbarClose = () => {
     setSnackbar({ ...snackbar, open: false });

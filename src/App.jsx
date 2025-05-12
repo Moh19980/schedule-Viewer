@@ -8,7 +8,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <Navbar />
-      <Container sx={{ mb:4 }}>
+
+      {/* page body */}
+      <Container sx={{ mb: 4 }}>
         <Routes>
           <Route path="/" element={<DailySchedule />} />
           <Route path="/dashboard" element={<Dashboard />} />
