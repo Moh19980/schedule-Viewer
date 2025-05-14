@@ -1,251 +1,199 @@
 import { useState, useEffect } from 'react';
-import { 
-  Box, 
-  Container, 
-  Typography, 
-  Paper, 
-  useTheme, 
-  ButtonGroup,
-  Button,
+import {
+  Box,
+  Container,
+  Typography,
+  Paper,
+  useTheme,
+  Fade,
   alpha,
-  Fade
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText
 } from '@mui/material';
 
-// Import Icons
-import EventNoteIcon from '@mui/icons-material/EventNote';
-import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
-import MeetingRoomIcon from '@mui/icons-material/MeetingRoom';
-import ListAltIcon from '@mui/icons-material/ListAlt';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+// Import your dashboard-specific icons
+import EventNoteIcon from '@mui/icons-material/EventNote'; // For Schedule
+import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1'; // For Add Lecturer
+import MeetingRoomIcon from '@mui/icons-material/MeetingRoom'; // For Add Room
+import ListAltIcon from '@mui/icons-material/ListAlt'; // For All Lecturers
 
-// Form Components
-import ScheduleForm from './ScheduleForm';
-import AddLecturerForm from './AddLecturerForm';
-import AddRoomForm from './AddRoomForm';
-import AllLecturers from './AllLecturere'; // Fixed typo in the name
+// Import your actual form/content components for the dashboard sections
+// Ensure these paths are correct relative to your Dashboard.js file
+import ScheduleForm from './ScheduleForm'; // Example component
+import AddLecturerForm from './AddLecturerForm'; // Example component
+import AddRoomForm from './AddRoomForm'; // Example component
+import AllLecturers from './AllLecturere'; // Example component (assuming typo 'AllLecturere' is intended filename)
 
 const Dashboard = () => {
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(0);
   const [loadedComponents, setLoadedComponents] = useState({});
   const theme = useTheme();
-  
-  // Tab configuration with icons, labels, and accent colors
-  const tabs = [
-    { 
-      icon: <EventNoteIcon fontSize="small" />, 
+
+  // Define the items for the dashboard sidebar
+  // The 'color' will be used for the active item's background
+  const dashboardItems = [
+    {
+      icon: <EventNoteIcon />,
       label: 'Schedule',
-      color: theme.palette.primary.main,
-      component: ScheduleForm
+      component: ScheduleForm,
+      color: theme.palette.primary.main // Blue, as seen in screenshot
     },
-    { 
-      icon: <PersonAddAlt1Icon fontSize="small" />, 
-      label: 'Lecturers',
-      color: theme.palette.secondary.main,
-      component: AddLecturerForm
+    {
+      icon: <PersonAddAlt1Icon />,
+      label: 'Lecturers', // Changed from "Add Lecturer" to "Lecturers" as in screenshot
+      component: AddLecturerForm,
+      color: theme.palette.secondary.main // Example color
     },
-    { 
-      icon: <MeetingRoomIcon fontSize="small" />, 
-      label: 'Rooms',
-      color: theme.palette.success.main,
-      component: AddRoomForm
+    {
+      icon: <MeetingRoomIcon />,
+      label: 'Rooms', // Changed from "Add Room" to "Rooms" as in screenshot
+      component: AddRoomForm,
+      color: theme.palette.success.main // Example color
     },
-    { 
-      icon: <ListAltIcon fontSize="small" />, 
+    {
+      icon: <ListAltIcon />,
       label: 'Lecturer List',
-      color: theme.palette.info.main,
-      component: AllLecturers
+      component: AllLecturers,
+      color: theme.palette.info.main // Example color
     }
   ];
 
-  // Load the component for the current tab and keep it in state
+  // Effect to mark a component as "loaded" when its tab is first activated
+  // This helps with the Fade animation if components are heavy
   useEffect(() => {
-    if (!loadedComponents[activeTab]) {
+    if (!loadedComponents[activeIndex]) {
       setLoadedComponents(prev => ({
         ...prev,
-        [activeTab]: true
+        [activeIndex]: true
       }));
     }
-  }, [activeTab, loadedComponents]);
+  }, [activeIndex, loadedComponents]);
+
+  const ActiveComponent = dashboardItems[activeIndex].component;
+
+  // Calculate the height of your sticky Navbar to correctly offset the sticky Dashboard sidebar
+  // AppBar sx has py: 1 (theme.spacing(1) top and bottom, so 8px * 2 = 16px)
+  // Toolbar default minHeight is usually 56px (mobile) or 64px (desktop)
+  // Let's assume desktop toolbar height for calculation.
+  const navbarPySpacing = parseInt(theme.spacing(1).replace('px', '')) * 2; // py: 1 means 1 * theme.spacing value * 2
+  const toolbarHeight = theme.mixins.toolbar.minHeight || 64; // Default MUI toolbar height for desktop
+  const navbarHeight = `${parseFloat(toolbarHeight) + navbarPySpacing}px`;
+  const sidebarStickyTopOffset = `calc(${navbarHeight} + ${theme.spacing(2)})`; // Navbar height + some margin
+  const sidebarMaxHeight = `calc(100vh - ${sidebarStickyTopOffset} - ${theme.spacing(4)})`; // Full height minus top offset and bottom padding
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        background: `linear-gradient(135deg, ${alpha(theme.palette.primary.light, 0.07)} 0%, ${alpha(theme.palette.secondary.light, 0.07)} 100%)`,
-        py: { xs: 3, md: 5 },
-        px: 2
-      }}
-    >
-      <Container maxWidth="lg" sx={{ mt: { xs: 2, md: 4 }, mb: 6 }}>
-        {/* Header */}
-        <Box sx={{ textAlign: 'center', mb: { xs: 4, md: 5 } }}>
+    <Box sx={{ pt: 2, pb: 4, px: 2, flexGrow: 1, mt: navbarHeight /* Offset content start by navbar height */ }}>
+      <Container maxWidth="xl"> {/* Consistent with your Navbar's maxWidth */}
+        {/* Header Title for the Dashboard */}
+        <Box sx={{ mb: { xs: 3, md: 4 } }}>
           <Typography
-            variant="h3"
+            variant="h4"
             component="h1"
             sx={{
-              fontWeight: 800,
-              letterSpacing: '-0.5px',
-              background: `linear-gradient(45deg, ${theme.palette.primary.main} 30%, ${theme.palette.warning.main} 90%)`,
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              mb: 1.5,
-              fontSize: { xs: '2.2rem', sm: '2.5rem', md: '3rem' }
+              fontWeight: 700,
+              color: 'text.primary',
+              mb: 0.5
             }}
           >
             Management Hub
           </Typography>
-          <Typography
-            variant="subtitle1"
-            sx={{
-              color: 'text.secondary',
-              maxWidth: 600,
-              mx: 'auto',
-              lineHeight: 1.6
-            }}
-          >
-            Manage schedules, lecturers, and rooms with our intuitive administration tools
+          <Typography variant="body1" sx={{ color: 'text.secondary' }}>
+            Manage schedules, lecturers, and rooms with our intuitive administration tools.
           </Typography>
         </Box>
 
-        {/* Main Card */}
-        <Paper
-          elevation={6}
-          sx={{
-            borderRadius: 6,
-            background: theme.palette.background.paper,
-            backgroundImage: `linear-gradient(145deg, ${alpha(theme.palette.background.paper, 0.95)}, ${theme.palette.background.paper})`,
-            backdropFilter: 'blur(10px)',
-            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-            boxShadow: `0 8px 40px 0 ${alpha(theme.palette.primary.dark, 0.08)}`,
-            overflow: 'hidden'
-          }}
-        >
-          {/* Navigation - Button Group Style */}
-          <Box
+        {/* Main Layout: Sidebar + Content Area */}
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: { xs: 2, md: 3 } }}>
+
+          {/* Dashboard Sidebar */}
+          <Paper
+            elevation={1}
             sx={{
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              p: 2,
-              background: alpha(theme.palette.background.default, 0.4),
-              borderBottom: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
-              position: 'relative'
+              width: { xs: '100%', md: 280 }, // Fixed width on desktop, full on mobile
+              p: 1.5, // Padding inside the sidebar paper
+              borderRadius: '12px', // Rounded corners matching screenshot
+              border: `1px solid ${alpha(theme.palette.divider, 0.6)}`,
+              alignSelf: 'flex-start', // Important for column layout and sticky positioning
+              position: { md: 'sticky' }, // Make sidebar sticky on medium screens and up
+              top: { md: sidebarStickyTopOffset }, // Offset below the sticky Navbar
+              maxHeight: { md: sidebarMaxHeight }, // Allow sidebar to scroll if content overflows viewport
+              overflowY: { md: 'auto' }, // Enable vertical scrolling for sidebar
+              backgroundColor: alpha(theme.palette.background.paper, 0.9),
+              backdropFilter: 'blur(5px)',
             }}
           >
-            <Box sx={{ display: { xs: 'flex', md: 'none' }, position: 'absolute', left: 16 }}>
-              <ButtonGroup size="small">
-                <Button 
-                  onClick={() => setActiveTab(prev => Math.max(0, prev - 1))}
-                  disabled={activeTab === 0}
-                >
-                  <ChevronLeftIcon fontSize="small" />
-                </Button>
-                <Button 
-                  onClick={() => setActiveTab(prev => Math.min(tabs.length - 1, prev + 1))}
-                  disabled={activeTab === tabs.length - 1}
-                >
-                  <ChevronRightIcon fontSize="small" />
-                </Button>
-              </ButtonGroup>
-            </Box>
-            
-            <ButtonGroup 
-              variant="contained" 
-              aria-label="dashboard navigation"
-              sx={{
-                boxShadow: '0 4px 14px rgba(0,0,0,0.1)',
-                borderRadius: '40px',
-                padding: '5px',
-                background: alpha(theme.palette.background.paper, 0.7),
-                backdropFilter: 'blur(8px)',
-                '& .MuiButtonGroup-grouped': {
-                  border: 'none !important',
-                  mx: 0.5,
-                  borderRadius: '30px !important',
-                },
-                display: { xs: 'none', md: 'flex' }
-              }}
-            >
-              {tabs.map((tab, index) => (
-                <Button
-                  key={index}
-                  onClick={() => setActiveTab(index)}
-                  aria-pressed={activeTab === index}
-                  aria-controls={`dashboard-panel-${index}`}
-                  startIcon={tab.icon}
+            <List component="nav" sx={{ p: 0 }}>
+              {dashboardItems.map((item, index) => (
+                <ListItemButton
+                  key={item.label}
+                  selected={activeIndex === index}
+                  onClick={() => setActiveIndex(index)}
                   sx={{
-                    bgcolor: activeTab === index ? tab.color : 'transparent',
-                    color: activeTab === index ? '#fff' : 'text.secondary',
-                    '&:hover': {
-                      bgcolor: activeTab === index 
-                        ? alpha(tab.color, 0.9) 
-                        : alpha(theme.palette.action.hover, 0.15)
+                    borderRadius: '8px', // Rounded corners for each button
+                    mb: 0.75, // Space between buttons
+                    py: 1.2,  // Vertical padding
+                    px: 1.5,  // Horizontal padding
+                    transition: 'background-color 0.2s, color 0.2s',
+                    '&.Mui-selected': {
+                      backgroundColor: item.color,
+                      color: theme.palette.getContrastText(item.color),
+                      boxShadow: `0 4px 12px ${alpha(item.color, 0.3)}`,
+                      '&:hover': {
+                        backgroundColor: alpha(item.color, 0.85), // Slightly darker on hover when selected
+                      },
+                      '& .MuiListItemIcon-root': {
+                        color: theme.palette.getContrastText(item.color),
+                      },
+                      '& .MuiListItemText-primary': {
+                        fontWeight: 600,
+                      }
                     },
-                    fontWeight: 600,
-                    textTransform: 'none',
-                    py: 1,
-                    px: 2.5,
-                    transition: 'all 0.2s ease',
-                    '&.MuiButton-root': {
-                      minWidth: '120px'
+                    '&:not(.Mui-selected):hover': {
+                      backgroundColor: alpha(theme.palette.action.hover, 0.08),
+                    },
+                    '& .MuiListItemIcon-root': {
+                      minWidth: 'auto', // Auto width for icon
+                      mr: 1.5, // Margin right of icon
+                      color: theme.palette.text.secondary, // Default icon color
+                    },
+                     '& .MuiListItemText-primary': {
+                        fontWeight: 500
                     }
                   }}
                 >
-                  {tab.label}
-                </Button>
+                  <ListItemIcon>{item.icon}</ListItemIcon>
+                  <ListItemText primary={item.label} />
+                </ListItemButton>
               ))}
-            </ButtonGroup>
-            
-            {/* Mobile current tab indicator */}
-            <Box sx={{ display: { xs: 'block', md: 'none' } }}>
-              <Button
-                variant="text"
-                startIcon={tabs[activeTab].icon}
-                sx={{
-                  color: tabs[activeTab].color,
-                  fontWeight: 600,
-                  textTransform: 'none',
-                  fontSize: '1rem'
-                }}
-              >
-                {tabs[activeTab].label}
-              </Button>
-            </Box>
-          </Box>
+            </List>
+          </Paper>
 
-          {/* Content Area - Pre-loaded and cached */}
-          <Box sx={{ position: 'relative', minHeight: '450px' }}>
-            {tabs.map((tab, index) => {
-              // Only render components that have been visited
-              const Component = tab.component;
-              return loadedComponents[index] ? (
-                <Fade key={index} in={activeTab === index} timeout={300}>
-                  <Box
-                    role="tabpanel"
-                    hidden={activeTab !== index}
-                    id={`dashboard-panel-${index}`}
-                    aria-labelledby={`dashboard-tab-${index}`}
-                    sx={{
-                      p: { xs: 2.5, md: 4 },
-                      position: activeTab === index ? 'relative' : 'absolute',
-                      width: '100%',
-                      top: 0,
-                      left: 0,
-                      display: activeTab === index ? 'block' : 'none'
-                    }}
-                  >
-                    <Component />
-                  </Box>
-                </Fade>
-              ) : null;
-            })}
-          </Box>
-        </Paper>
+          {/* Content Area */}
+          <Paper
+            elevation={2}
+            sx={{
+              flexGrow: 1, // Takes up remaining space
+              p: { xs: 2, sm: 3, md: 3.5 }, // Responsive padding
+              borderRadius: '12px', // Rounded corners matching screenshot
+              border: `1px solid ${alpha(theme.palette.divider, 0.6)}`,
+              minHeight: { xs: 300, md: 500 }, // Minimum height for the content area
+              backgroundColor: alpha(theme.palette.background.paper, 0.95),
+              backdropFilter: 'blur(5px)',
+            }}
+          >
+            {/* Render the active component with a Fade transition */}
+            <Fade in={true} timeout={350} key={activeIndex} unmountOnExit>
+              <div> {/* Wrapper div for Fade transition and key prop */}
+                {loadedComponents[activeIndex] && <ActiveComponent />}
+              </div>
+            </Fade>
+          </Paper>
+        </Box>
       </Container>
     </Box>
   );
 };
 
 export default Dashboard;
-

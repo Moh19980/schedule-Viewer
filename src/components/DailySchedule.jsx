@@ -1,11 +1,11 @@
 /*********************************************************************
  *  ModernWeeklySchedule.jsx
  *  – Fully-featured weekly scheduler with printable timetable
- *  – No external print library (uses window.print) for better preformance 
- *  – Ensures fresh data are fetched before printing
+ *  – Uses window.print for printing (no external deps)
+ *  – Fetches stage list from /stages and filters lectures by StageId
  *********************************************************************/
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Container,
   Box,
@@ -60,109 +60,104 @@ import {
   useQuery,
 } from "@tanstack/react-query";
 import { format, addWeeks, startOfWeek, endOfWeek } from "date-fns";
-import { api } from "../api"; // <-- change to your axios instance path
+import { api } from "../api"; // ← your axios instance
 
-/* ------------------------------------------------------------------
-   Constants
------------------------------------------------------------------- */
+/* ------------------------------------------------------------------ */
+/* helpers & constants                                               */
+/* ------------------------------------------------------------------ */
+
 const DAYS_EN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"];
 const DAYS_AR = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"];
 
-const STAGE_OPTIONS = [
-  { value: "stage1", label: "المرحلة الأولى" },
-  { value: "stage2", label: "المرحلة الثانية" },
-  { value: "stage3", label: "المرحلة الثالثة" },
-  { value: "stage4", label: "المرحلة الرابعة" },
-  { value: "stage5", label: "معالجة " },
-];
-/**
- * Generates time slots from start time to end time with a specified interval.
- * 
-/**
- * Generates time slots from start time to end time with a specified interval.
- * @param {string} startTime - Starting time in "HH:mm" format.
- * @param {string} endTime - Ending time in "HH:mm" format.
- * @param {number} interval - Interval in minutes.
- * @returns {string[]} Array of time slots in "HH:mm" format.
- */
 const generateTimeSlots = (startTime, endTime, interval) => {
   const slots = [];
-  let current = new Date(`1970-01-01T${startTime}:00`);
+  let cur = new Date(`1970-01-01T${startTime}:00`);
   const end = new Date(`1970-01-01T${endTime}:00`);
-
-  while (current <= end) {
-    slots.push(current.toTimeString().slice(0, 5));
-    current = new Date(current.getTime() + interval * 60000);
+  while (cur <= end) {
+    slots.push(cur.toTimeString().slice(0, 5));
+    cur = new Date(cur.getTime() + interval * 60_000);
   }
-
   return slots;
 };
-
-// Example usage: Generates slots from 08:30 to 20:30 with a 60-minute interval
 const TIME_SLOTS = generateTimeSlots("08:30", "16:30", 60);
-console.log(TIME_SLOTS);
 
-/* ------------------------------------------------------------------
-   Styled helpers
------------------------------------------------------------------- */
+/* ------------------------------------------------------------------ */
+/* fetch stages hook                                                  */
+/* ------------------------------------------------------------------ */
+
+const useStages = () => {
+  const [stages, setStages] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get("/stages"); // → [{ id, name, ... }]
+        setStages(res.data);
+      } catch (err) {
+        console.error("Error fetching stages:", err);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  return { stages, loading };
+};
+
+/* ------------------------------------------------------------------ */
+/* tiny UI helpers                                                    */
+/* ------------------------------------------------------------------ */
+
 const StyledTimeSlot = styled(Box)(({ theme }) => ({
   padding: theme.spacing(0.5),
   fontSize: "0.75rem",
   color: theme.palette.text.secondary,
   borderBottom: `1px solid ${theme.palette.divider}`,
-  height: 30,
+  height: 28,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
 }));
 
 const LectureCard = styled(Card)(({ theme, color = "primary" }) => ({
-  padding: theme.spacing(1.5),
+  padding: theme.spacing(1.25),
   marginBottom: theme.spacing(1),
   borderRadius: theme.spacing(1),
-  boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
   borderLeft: `4px solid ${theme.palette[color].main}`,
-  transition: "transform 0.2s, box-shadow 0.2s",
-  cursor: "pointer",
+  boxShadow: "0 1px 6px rgba(0,0,0,0.08)",
   "&:hover": {
+    boxShadow: "0 3px 12px rgba(0,0,0,0.15)",
     transform: "translateY(-2px)",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
   },
+  transition: "all .2s",
 }));
 
-const ColorCircle = styled(Circle)(({ color, theme }) => ({
+const ColorCircle = styled(Circle)(({ theme, color }) => ({
   fontSize: 12,
   color: theme.palette[color].main,
 }));
 
-const ViewTab = styled(Tab)(() => ({ minWidth: 100, fontWeight: 600 }));
+const ViewTab = styled(Tab)(() => ({ minWidth: 110, fontWeight: 600 }));
 
-/* ------------------------------------------------------------------
-   Reusable tiny button
------------------------------------------------------------------- */
-const ActionButton = ({
-  icon,
-  label,
-  color = "primary",
-  onClick,
-  disabled,
-}) => (
+const ActionButton = ({ icon, label, onClick, color = "primary", disabled }) => (
   <Button
     variant="outlined"
+    size="small"
     color={color}
     startIcon={icon}
     onClick={onClick}
     disabled={disabled}
-    size="small"
     sx={{ borderRadius: 2 }}
   >
     {label}
   </Button>
 );
 
-/* ------------------------------------------------------------------
-   Week-grid sub-components
------------------------------------------------------------------- */
+/* ------------------------------------------------------------------ */
+/* grid & timeline views                                              */
+/* ------------------------------------------------------------------ */
+
 const EmptyDay = () => (
   <Box
     sx={{
@@ -171,48 +166,41 @@ const EmptyDay = () => (
       alignItems: "center",
       justifyContent: "center",
       p: 2,
-      borderRadius: 2,
-      bgcolor: "background.paper",
       border: "1px dashed",
       borderColor: "divider",
+      bgcolor: "background.paper",
+      borderRadius: 2,
       minHeight: 120,
     }}
   >
-    <Typography variant="body2" color="text.secondary">
-      لا توجد محاضرات مجدولة
-    </Typography>
+    <Typography color="text.secondary">لا توجد محاضرات مجدولة</Typography>
   </Box>
 );
 
-const LectureItem = ({ lecture, colorIndex }) => {
-  const colors = ["primary", "secondary", "success", "warning", "info"];
-  const color = colors[colorIndex % colors.length];
+const LectureItem = ({ lecture, idx }) => {
+  const palette = ["primary", "secondary", "success", "warning", "info"];
+  const color = palette[idx % palette.length];
   return (
     <LectureCard color={color}>
-      <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
-        <Typography variant="subtitle2" fontWeight={600}>
-          {lecture.course_name}
-        </Typography>
+      <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
+        <Typography fontWeight={600}>{lecture.course_name}</Typography>
         <ColorCircle color={color} />
       </Box>
-
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-        <AccessTime fontSize="small" color="action" sx={{ fontSize: 14 }} />
+      <Stack direction="row" spacing={0.5} alignItems="center">
+        <AccessTime fontSize="small" sx={{ fontSize: 15 }} />
         <Typography variant="caption">
-          {lecture.start_time.slice(0, 5)} - {lecture.end_time.slice(0, 5)}
+          {lecture.start_time.slice(0, 5)} – {lecture.end_time.slice(0, 5)}
         </Typography>
       </Stack>
-
       {lecture.Room?.room_name && (
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-          <Room fontSize="small" color="action" sx={{ fontSize: 14 }} />
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          <Room fontSize="small" sx={{ fontSize: 15 }} />
           <Typography variant="caption">{lecture.Room.room_name}</Typography>
         </Stack>
       )}
-
       {lecture.Lecturers?.length > 0 && (
-        <Stack direction="row" spacing={1} alignItems="center">
-          <Person fontSize="small" color="action" sx={{ fontSize: 14 }} />
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          <Person fontSize="small" sx={{ fontSize: 15 }} />
           <Typography variant="caption" noWrap>
             {lecture.Lecturers.map((l) => l.name).join(", ")}
           </Typography>
@@ -222,56 +210,44 @@ const LectureItem = ({ lecture, colorIndex }) => {
   );
 };
 
-/* ------------------------------------------------------------------
-   Grid view
------------------------------------------------------------------- */
-const WeekGrid = ({ grouped, isLoading }) => {
-  if (isLoading) {
+const WeekGrid = ({ grouped, loading }) => {
+  if (loading)
     return (
       <Grid container spacing={2}>
         {DAYS_EN.map((_, i) => (
-          <Grid item xs={12} sm={6} md={2.4} key={i}>
-            <Skeleton
-              variant="rectangular"
-              height={400}
-              sx={{ borderRadius: 2 }}
-            />
+          <Grid key={i} item xs={12} sm={6} md={2.4}>
+            <Skeleton variant="rectangular" sx={{ height: 400, borderRadius: 2 }} />
           </Grid>
         ))}
       </Grid>
     );
-  }
+
   return (
     <Grid container spacing={2}>
-      {DAYS_EN.map((day, i) => {
-        const sorted = [...(grouped[day] || [])].sort((a, b) =>
+      {DAYS_EN.map((d, i) => {
+        const dayLectures = [...(grouped[d] || [])].sort((a, b) =>
           a.start_time.localeCompare(b.start_time)
         );
         return (
-          <Grid item xs={12} sm={6} md={2.4} key={day}>
+          <Grid key={d} item xs={12} sm={6} md={2.4}>
             <Paper
-              elevation={0}
               sx={{
                 p: 2,
                 borderRadius: 2,
                 minHeight: 350,
-                bgcolor: alpha("#f5f5f5", 0.5),
                 border: 1,
                 borderColor: "divider",
+                bgcolor: alpha("#f5f5f5", 0.45),
               }}
             >
               <Typography
-                variant="subtitle1"
                 fontWeight={700}
-                sx={{ mb: 2, textAlign: "center", color: "primary.dark" }}
+                sx={{ mb: 1.5, textAlign: "center", color: "primary.dark" }}
               >
                 {DAYS_AR[i]}
               </Typography>
-
-              {sorted.length ? (
-                sorted.map((lec, idx) => (
-                  <LectureItem key={lec.id} lecture={lec} colorIndex={idx} />
-                ))
+              {dayLectures.length ? (
+                dayLectures.map((lec, idx) => <LectureItem key={lec.id} lecture={lec} idx={idx} />)
               ) : (
                 <EmptyDay />
               )}
@@ -283,20 +259,9 @@ const WeekGrid = ({ grouped, isLoading }) => {
   );
 };
 
-/* ------------------------------------------------------------------
-   Timeline view
------------------------------------------------------------------- */
-const TimelineView = ({ grouped, isLoading }) => {
+const TimelineView = ({ grouped, loading }) => {
   const theme = useTheme();
-  if (isLoading) {
-    return (
-      <Box sx={{ mt: 2 }}>
-        <Skeleton variant="rectangular" height={500} sx={{ borderRadius: 2 }} />
-      </Box>
-    );
-  }
-
-  const dayColors = [
+  const band = [
     theme.palette.primary.light,
     theme.palette.secondary.light,
     theme.palette.success.light,
@@ -304,11 +269,11 @@ const TimelineView = ({ grouped, isLoading }) => {
     theme.palette.info.light,
   ];
 
+  if (loading)
+    return <Skeleton variant="rectangular" sx={{ height: 500, borderRadius: 2, mt: 2 }} />;
+
   return (
-    <Paper
-      elevation={0}
-      sx={{ mt: 2, p: 2, borderRadius: 2, overflowX: "auto" }}
-    >
+    <Paper elevation={0} sx={{ mt: 2, p: 2, borderRadius: 2, overflowX: "auto" }}>
       <Box
         sx={{
           minWidth: 1000,
@@ -316,7 +281,7 @@ const TimelineView = ({ grouped, isLoading }) => {
           gridTemplateColumns: "80px repeat(5, 1fr)",
         }}
       >
-        {/* header row */}
+        {/* header */}
         <Box sx={{ textAlign: "center", p: 1, fontWeight: 600 }}>الوقت</Box>
         {DAYS_AR.map((day, i) => (
           <Box
@@ -325,128 +290,42 @@ const TimelineView = ({ grouped, isLoading }) => {
               textAlign: "center",
               p: 1,
               fontWeight: 600,
+              bgcolor: alpha(band[i], 0.15),
               borderBottom: 1,
               borderColor: "divider",
-              bgcolor: alpha(dayColors[i], 0.1),
             }}
           >
             {day}
           </Box>
         ))}
 
-        {/* body rows */}
-        {TIME_SLOTS.map((time) => (
-          <React.Fragment key={time}>
-            <StyledTimeSlot>{time}</StyledTimeSlot>
-            {DAYS_EN.map((day, i) => {
-              const cellLectures =
-                grouped[day]?.filter((l) => l.start_time.startsWith(time)) ||
-                [];
+        {/* body */}
+        {TIME_SLOTS.map((t) => (
+          <React.Fragment key={t}>
+            <StyledTimeSlot>{t}</StyledTimeSlot>
+            {DAYS_EN.map((d, i) => {
+              const cell = grouped[d]?.filter((l) => l.start_time.startsWith(t)) || [];
               return (
                 <Box
-                  key={`${day}-${time}`}
+                  key={d + t}
                   sx={{
                     borderBottom: 1,
                     borderColor: "divider",
-                    minHeight: 100,
-                    p: 1.5,
-                    bgcolor: cellLectures.length
-                      ? alpha(dayColors[i], 0.05)
-                      : "transparent",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 1.5,
-                    transition: "background-color 0.3s",
-                    "&:hover": {
-                      bgcolor: alpha(dayColors[i], 0.08),
-                    },
+                    p: 1,
+                    minHeight: 90,
+                    bgcolor: cell.length ? alpha(band[i], 0.06) : "transparent",
                   }}
                 >
-                  {cellLectures.length ? (
-                    cellLectures.map((lec) => (
-                      <Box
-                        key={lec.id}
-                        sx={{
-                          p: 1.5,
-                          mb: 1,
-                          borderRadius: 2,
-                          bgcolor: alpha("#DCE775", 0.2),
-                          border: `1px solid ${alpha("#DCE775", 0.4)}`,
-                          boxShadow: `0px 2px 6px ${alpha("#DCE775", 0.3)}`,
-                          transition: "transform 0.3s, box-shadow 0.3s",
-                          "&:hover": {
-                            transform: "translateY(-2px)",
-                            boxShadow: `0px 4px 10px ${alpha("#DCE775", 0.4)}`,
-                            bgcolor: alpha("#DCE775", 0.3),
-                          },
-                        }}
-                      >
-                        <Typography
-                          variant="body1"
-                          fontWeight={600}
-                          sx={{
-                            color: "#558B2F",
-                            mb: 0.5,
-                          }}
-                        >
-                          {lec.course_name}
-                        </Typography>
-
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            color: "#7C7C7C",
-                            mb: 0.5,
-                          }}
-                        >
-                          Room: {lec.Room?.room_name || "—"}
-                        </Typography>
-
-                        {lec.Lecturers?.length > 0 && (
-                          <Box
-                            sx={{
-                              display: "flex",
-                              gap: 0.5,
-                              flexWrap: "wrap",
-                              mt: 0.5,
-                            }}
-                          >
-                            {lec.Lecturers.map((l) => (
-                              <Box
-                                key={l.id}
-                                sx={{
-                                  bgcolor: alpha("#AED581", 0.3),
-                                  color: "#33691E",
-                                  px: 1,
-                                  py: 0.5,
-                                  borderRadius: 1,
-                                  fontSize: "0.85rem",
-                                  fontWeight: 500,
-                                }}
-                              >
-                                {l.name}
-                              </Box>
-                            ))}
-                          </Box>
-                        )}
-                      </Box>
+                  {cell.length ? (
+                    cell.map((lec) => (
+                      <Typography variant="caption" key={lec.id} display="block">
+                        {lec.course_name}
+                      </Typography>
                     ))
                   ) : (
-                    <Box
-                      sx={{
-                        height: "100%",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "text.disabled",
-                        fontStyle: "italic",
-                        bgcolor: alpha("#F5F5F5", 0.5),
-                        borderRadius: 1,
-                        p: 1,
-                      }}
-                    >
-                      No Lectures
-                    </Box>
+                    <Typography variant="caption" color="text.disabled">
+                      —
+                    </Typography>
                   )}
                 </Box>
               );
@@ -458,110 +337,142 @@ const TimelineView = ({ grouped, isLoading }) => {
   );
 };
 
+/* ------------------------------------------------------------------ */
+/* printable table                                                    */
+/* ------------------------------------------------------------------ */
+
 /* ------------------------------------------------------------------
    Printable component
 ------------------------------------------------------------------ */
 const PrintableWeek = React.forwardRef(
-  ({ grouped, stageLabel, weekRange }, ref) => (
+  ({ grouped, stageName, weekRange }, ref) => (
     <Box
       ref={ref}
       sx={{
         p: 4,
-        bgcolor: "#fff",
-        fontFamily: "Arial, sans-serif",
         width: "297mm",
         margin: "0 auto",
         textAlign: "center",
+        fontFamily: "Arial, sans-serif",
       }}
     >
+      {/* title */}
       <Typography variant="h5" fontWeight={700}>
-        {`جدول محاضرات ${stageLabel}`}
+        {`جدول محاضرات ${stageName}`}
       </Typography>
       <Typography variant="subtitle1" color="text.secondary">
         {weekRange}
       </Typography>
 
+      {/* table */}
       <Box
         sx={{
-          display: "grid",
-          gridTemplateColumns: `80px repeat(5, 1fr)`,
-          border: "1px solid #ddd",
-          borderRadius: 1,
+          mt: 3,
           overflow: "hidden",
-          marginTop: 3,
+          border: 1,
+          borderColor: "divider",
+          borderRadius: 1,
+          display: "grid",
+          gridTemplateColumns: "80px repeat(5, 1fr)",
         }}
       >
-        {/* Header */}
-        <Box
-          sx={{ bgcolor: "#1976d2", color: "#fff", p: 1.5, fontWeight: 600 }}
-        >
+        {/* header row */}
+        <Box sx={{ bgcolor: "#1976d2", color: "#fff", p: 1, fontWeight: 600 }}>
           الوقت
         </Box>
-        {DAYS_AR.map((day) => (
+        {DAYS_AR.map((d) => (
           <Box
-            key={day}
-            sx={{
-              bgcolor: "#1976d2",
-              color: "#fff",
-              p: 1.5,
-              fontWeight: 600,
-              borderLeft: "1px solid #1565c0",
-            }}
+            key={d}
+            sx={{ bgcolor: "#1976d2", color: "#fff", p: 1, fontWeight: 600 }}
           >
-            {day}
+            {d}
           </Box>
         ))}
 
-        {/* Time Slots */}
-        {TIME_SLOTS.map((time) => (
-          <React.Fragment key={time}>
+        {/* body rows */}
+        {TIME_SLOTS.map((t) => (
+          <React.Fragment key={t}>
+            {/* left-hand time band */}
             <Box
               sx={{
-                p: 1.5,
+                p: 1,
                 bgcolor: "#f5f5f5",
-                borderTop: "1px solid #ddd",
-                fontWeight: 500,
                 textAlign: "center",
+                fontWeight: 500,
               }}
             >
-              {time}
+              {t}
             </Box>
-            {DAYS_EN.map((day) => {
-              const cellLectures =
-                grouped[day]?.filter(
-                  (l) => l.start_time <= time && l.end_time >= time
+
+            {/* five day cells */}
+            {DAYS_EN.map((d) => {
+              const lectures =
+                grouped[d]?.filter(
+                  (l) => l.start_time <= t && l.end_time >= t
                 ) || [];
+
               return (
                 <Box
-                  key={`${day}-${time}`}
+                  key={d + t}
                   sx={{
-                    p: 1,
-                    borderTop: "1px solid #ddd",
-                    minHeight: 50,
+                    p: 0.5,
+                    minHeight: 48,
                     display: "flex",
                     flexDirection: "column",
+                    alignItems: "stretch",
                     justifyContent: "center",
-                    alignItems: "center",
+                    gap: 0.5,
+                    borderLeft: 1,
+                    borderColor: "divider",
                   }}
                 >
-                  {cellLectures.length > 0 ? (
-                    cellLectures.map((lec) => (
-                      <Box key={lec.id} sx={{ textAlign: "center", mb: 0.5 }}>
+                  {lectures.length ? (
+                    lectures.map((lec) => (
+                      <Box
+                        key={lec.id}
+                        sx={{
+                          px: 1,
+                          py: 0.5,
+                          bgcolor: "#f0f4ff",
+                          border: "1px solid #c5d0ff",
+                          borderRadius: 1,
+                          fontSize: "0.75rem",
+                          textAlign: "center",
+                        }}
+                      >
                         <Typography
-                          sx={{ fontWeight: 600, fontSize: "0.9rem" }}
+                          variant="subtitle2"
+                          sx={{ fontSize: "0.8rem", fontWeight: 600 }}
                         >
                           {lec.course_name}
                         </Typography>
-                        <Typography sx={{ fontSize: "0.8rem", color: "#555" }}>
-                          {lec.Lecturers?.map((l) => l.name).join(", ")}
-                        </Typography>
-                        <Typography sx={{ fontSize: "0.8rem", color: "#555" }}>
-                          {lec.Room?.room_name || "—"}
-                        </Typography>
+                        {lec.Lecturers?.length > 0 && (
+                          <Typography
+                            variant="caption"
+                            sx={{ display: "block", lineHeight: 1.4 }}
+                          >
+                            {lec.Lecturers.map((l) => l.name).join(", ")}
+                          </Typography>
+                        )}
+                        {lec.Room?.room_name && (
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ lineHeight: 1.4 }}
+                          >
+                            {lec.Room.room_name}
+                          </Typography>
+                        )}
                       </Box>
                     ))
                   ) : (
-                    <Typography sx={{ color: "#aaa" }}>—</Typography>
+                    <Typography
+                      variant="caption"
+                      color="text.disabled"
+                      sx={{ textAlign: "center", width: "100%" }}
+                    >
+                      —
+                    </Typography>
                   )}
                 </Box>
               );
@@ -573,98 +484,70 @@ const PrintableWeek = React.forwardRef(
   )
 );
 
-/* ------------------------------------------------------------------
-   Main scheduler component
------------------------------------------------------------------- */
+
+/* ------------------------------------------------------------------ */
+/* main scheduler component                                           */
+/* ------------------------------------------------------------------ */
+
 function SchedulerInner() {
   const theme = useTheme();
+  const { stages, loading: stagesLoading } = useStages();
 
-  /* local state */
-  const [stage, setStage] = useState("stage1");
+  /* state */
+  const [stage, setStage] = useState(1); // numeric StageId
   const [weekDate, setWeekDate] = useState(new Date());
   const [search, setSearch] = useState("");
-  const [viewType, setViewType] = useState(0); // 0 grid, 1 timeline
+  const [viewType, setViewType] = useState(0); // 0 grid | 1 timeline
   const [filterAnchor, setFilterAnchor] = useState(null);
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [drawer, setDrawer] = useState(false);
 
-  /* week helpers */
-  const weekFormatted = useMemo(() => {
+  /* week label */
+  const weekRange = useMemo(() => {
     const s = startOfWeek(weekDate, { weekStartsOn: 0 });
     const e = endOfWeek(weekDate, { weekStartsOn: 0 });
     return `${format(s, "yyyy/MM/dd")} - ${format(e, "yyyy/MM/dd")}`;
   }, [weekDate]);
 
-  /* React Query */
-  const {
-    data = [],
-    isLoading,
-    isError,
-    refetch,
-    isFetching,
-  } = useQuery({
+  /* lectures query */
+  const { data = [], isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["lectures", stage, weekDate],
     queryFn: async () => {
-      const start = format(
-        startOfWeek(weekDate, { weekStartsOn: 0 }),
-        "yyyy-MM-dd"
-      );
-      const end = format(
-        endOfWeek(weekDate, { weekStartsOn: 0 }),
-        "yyyy-MM-dd"
-      );
-      const res = await api.get("/lectures", { params: { stage, start, end } });
-      return res.data?.data || [];
+      const start = format(startOfWeek(weekDate), "yyyy-MM-dd");
+      const end = format(endOfWeek(weekDate), "yyyy-MM-dd");
+      const res = await api.get("/lectures", {
+        params: { StageId: stage, start, end },
+      });
+      return res.data?.data ?? res.data;
     },
     staleTime: 0,
-    refetchOnWindowFocus: false,
   });
 
-  /* group + search */
+  /* filter & group */
   const grouped = useMemo(() => {
-    const filt = search
-      ? data.filter(
-          (l) =>
-            l.course_name.toLowerCase().includes(search.toLowerCase()) ||
-            l.Lecturers?.some((t) =>
-              t.name.toLowerCase().includes(search.toLowerCase())
-            ) ||
-            (l.Room?.room_name &&
-              l.Room.room_name.toLowerCase().includes(search.toLowerCase()))
-        )
-      : data;
+    const byStage = data.filter((l) => l.StageId === stage);
+    const afterSearch =
+      search.trim() === ""
+        ? byStage
+        : byStage.filter(
+            (l) =>
+              l.course_name.toLowerCase().includes(search.toLowerCase()) ||
+              l.Lecturers?.some((t) => t.name.toLowerCase().includes(search.toLowerCase())) ||
+              l.Room?.room_name?.toLowerCase().includes(search.toLowerCase())
+          );
+
     return DAYS_EN.reduce((acc, d) => {
-      acc[d] = filt.filter((l) => l.day_of_week === d);
+      acc[d] = afterSearch.filter((l) => l.day_of_week === d);
       return acc;
     }, {});
-  }, [data, search]);
+  }, [data, stage, search]);
 
-  /* async print – fetch fresh first */
-  const handlePrint = () => {
-    if (data.length > 0) {
-      window.print();
-    } else {
-      alert("لا توجد محاضرات لهذه المرحلة / الأسبوع.");
-    }
-  };
+  /* helpers */
+  const canPrint = data.length > 0 && !isLoading && !isFetching && !isError;
 
-  const canPrint = !isLoading && !isFetching && !isError && data.length > 0;
-
-  /* helpers for navigation, menus */
-  const prevWeek = () => setWeekDate(addWeeks(weekDate, -1));
-  const nextWeek = () => setWeekDate(addWeeks(weekDate, 1));
-  const goToday = () => setWeekDate(new Date());
-  const openFilterMenu = (e) => setFilterAnchor(e.currentTarget);
-  const closeFilterMenu = () => setFilterAnchor(null);
-  const toggleDrawer = (o) => () => setMobileDrawerOpen(o);
-
-  const currentStageLabel = STAGE_OPTIONS.find((s) => s.value === stage)?.label;
-
-  /* ------------------------------------------------------------------
-     JSX
-  ------------------------------------------------------------------ */
+  /* render */
   return (
     <Container maxWidth="xl" sx={{ py: 3 }}>
-      {/* print-only visibility rules */}
+      {/* print CSS */}
       <GlobalStyles
         styles={{
           "@media print": {
@@ -672,46 +555,47 @@ function SchedulerInner() {
             "body *": { visibility: "hidden" },
             "#print-area, #print-area *": { visibility: "visible" },
             "#print-area": { position: "absolute", inset: 0 },
-            "@page": { margin: "12mm" },
           },
         }}
       />
 
-      {/* Mobile drawer (filters) */}
+      {/* mobile drawer */}
       <SwipeableDrawer
         anchor="right"
-        open={mobileDrawerOpen}
-        onClose={toggleDrawer(false)}
-        onOpen={toggleDrawer(true)}
+        open={drawer}
+        onClose={() => setDrawer(false)}
+        onOpen={() => setDrawer(true)}
         sx={{ display: { xs: "block", md: "none" } }}
       >
-        <Box sx={{ width: 250, p: 2 }}>
+        <Box sx={{ width: 260, p: 2 }}>
           <Box sx={{ display: "flex", justifyContent: "space-between", mb: 2 }}>
-            <Typography variant="h6" fontWeight={600}>
-              القائمة
-            </Typography>
-            <IconButton onClick={toggleDrawer(false)}>
+            <Typography fontWeight={600}>القائمة</Typography>
+            <IconButton onClick={() => setDrawer(false)}>
               <Close />
             </IconButton>
           </Box>
           <Divider sx={{ mb: 2 }} />
-          <FormControl fullWidth sx={{ mb: 2 }}>
-            <InputLabel id="mobile-stage">المرحلة</InputLabel>
+          <FormControl fullWidth size="small">
+            <InputLabel id="m-stage">المرحلة</InputLabel>
             <Select
-              labelId="mobile-stage"
+              labelId="m-stage"
               value={stage}
               label="المرحلة"
-              onChange={(e) => setStage(e.target.value)}
+              onChange={(e) => setStage(Number(e.target.value))}
             >
-              {STAGE_OPTIONS.map((opt) => (
-                <MenuItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </MenuItem>
-              ))}
+              {stagesLoading ? (
+                <MenuItem disabled>Loading…</MenuItem>
+              ) : (
+                stages.map((s) => (
+                  <MenuItem key={s.id} value={s.id}>
+                    {s.name}
+                  </MenuItem>
+                ))
+              )}
             </Select>
           </FormControl>
           <List>
-            <ListItem button onClick={goToday}>
+            <ListItem button onClick={() => setWeekDate(new Date())}>
               <ListItemText primary="اليوم" />
             </ListItem>
             <ListItem button onClick={refetch}>
@@ -721,25 +605,19 @@ function SchedulerInner() {
         </Box>
       </SwipeableDrawer>
 
-      {/* Header */}
-      <Box sx={{ mb: 3 }}>
-        <Typography
-          variant="h4"
-          fontWeight={800}
-          color="primary.main"
-          sx={{ mb: 1, display: "flex", alignItems: "center" }}
-        >
-          <EventNote sx={{ mr: 1.5, fontSize: 32 }} />
+      {/* page header */}
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="h4" fontWeight={800} sx={{ mb: 0.5, display: "flex", alignItems: "center" }}>
+          <EventNote sx={{ mr: 1 }} />
           جدول المحاضرات الأسبوعي
         </Typography>
-        <Typography variant="subtitle1" color="text.secondary">
-          {currentStageLabel} | {weekFormatted}
+        <Typography color="text.secondary">
+          {stages.find((s) => s.id === stage)?.name || "—"} | {weekRange}
         </Typography>
       </Box>
 
-      {/* Toolbar */}
+      {/* toolbar */}
       <Paper
-        elevation={0}
         sx={{
           p: 2,
           mb: 3,
@@ -750,38 +628,25 @@ function SchedulerInner() {
         }}
       >
         <Grid container spacing={2} alignItems="center">
+          {/* mobile menu */}
           <Grid item sx={{ display: { xs: "block", md: "none" } }}>
-            <IconButton onClick={toggleDrawer(true)}>
+            <IconButton onClick={() => setDrawer(true)}>
               <MenuIcon />
             </IconButton>
           </Grid>
 
           {/* week nav */}
-          <Grid item xs={12} md="auto">
+          <Grid item>
             <Stack direction="row" spacing={1} alignItems="center">
-              <ActionButton
-                icon={<ChevronLeft />}
-                label="السابق"
-                onClick={prevWeek}
-                color="secondary"
-              />
+              <ActionButton icon={<ChevronLeft />} label="السابق" onClick={() => setWeekDate(addWeeks(weekDate, -1))} />
               <IconButton
                 color="primary"
-                onClick={goToday}
-                sx={{
-                  border: 2,
-                  borderColor: "primary.main",
-                  bgcolor: "background.paper",
-                }}
+                sx={{ border: 2, borderColor: "primary.main", bgcolor: "background.paper" }}
+                onClick={() => setWeekDate(new Date())}
               >
                 <CalendarMonth />
               </IconButton>
-              <ActionButton
-                icon={<ChevronRight />}
-                label="التالي"
-                onClick={nextWeek}
-                color="secondary"
-              />
+              <ActionButton icon={<ChevronRight />} label="التالي" onClick={() => setWeekDate(addWeeks(weekDate, 1))} />
             </Stack>
           </Grid>
 
@@ -790,58 +655,43 @@ function SchedulerInner() {
             <TextField
               fullWidth
               size="small"
-              placeholder="بحث..."
+              placeholder="بحث…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              InputProps={{
-                startAdornment: <Search color="action" sx={{ mr: 1 }} />,
-              }}
+              InputProps={{ startAdornment: <Search sx={{ mr: 1 }} /> }}
               sx={{ bgcolor: "background.paper", borderRadius: 2 }}
             />
           </Grid>
 
           {/* stage select (desktop) */}
-          <Grid item md sx={{ display: { xs: "none", md: "block" } }}>
-            <FormControl size="small" sx={{ minWidth: 180 }}>
-              <InputLabel id="stage-sel">المرحلة</InputLabel>
+          <Grid item sx={{ flexGrow: 1, display: { xs: "none", md: "block" } }}>
+            <FormControl size="small" sx={{ minWidth: 160 }}>
+              <InputLabel id="d-stage">المرحلة</InputLabel>
               <Select
-                labelId="stage-sel"
+                labelId="d-stage"
                 value={stage}
                 label="المرحلة"
-                onChange={(e) => setStage(e.target.value)}
+                onChange={(e) => setStage(Number(e.target.value))}
               >
-                {STAGE_OPTIONS.map((opt) => (
-                  <MenuItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </MenuItem>
-                ))}
+                {stagesLoading ? (
+                  <MenuItem disabled>Loading…</MenuItem>
+                ) : (
+                  stages.map((s) => (
+                    <MenuItem key={s.id} value={s.id}>
+                      {s.name}
+                    </MenuItem>
+                  ))
+                )}
               </Select>
             </FormControl>
           </Grid>
 
-          {/* action buttons */}
-          <Grid item xs={12} md="auto">
-            <Stack
-              direction="row"
-              spacing={1}
-              sx={{ display: { xs: "none", md: "flex" } }}
-            >
-              <ActionButton
-                icon={<Download />}
-                label="طباعة"
-                onClick={handlePrint}
-                disabled={!canPrint}
-              />
-              <ActionButton
-                icon={<Refresh />}
-                label="تحديث"
-                onClick={refetch}
-                color="info"
-              />
-              <IconButton
-                onClick={openFilterMenu}
-                sx={{ border: 1, borderColor: "divider" }}
-              >
+          {/* refresh & print */}
+          <Grid item>
+            <Stack direction="row" spacing={1}>
+              <ActionButton icon={<Download />} label="طباعة" disabled={!canPrint} onClick={() => window.print()} />
+              <ActionButton icon={<Refresh />} label="تحديث" onClick={refetch} color="info" />
+              <IconButton onClick={(e) => setFilterAnchor(e.currentTarget)}>
                 <FilterList />
               </IconButton>
             </Stack>
@@ -849,79 +699,43 @@ function SchedulerInner() {
         </Grid>
       </Paper>
 
-      {/* filter menu */}
-      <Menu
-        anchorEl={filterAnchor}
-        open={Boolean(filterAnchor)}
-        onClose={closeFilterMenu}
-        PaperProps={{ elevation: 2, sx: { width: 200, mt: 1 } }}
-      >
-        <MenuItem onClick={closeFilterMenu}>
-          <Typography variant="body2">فلترة حسب الأستاذ</Typography>
-        </MenuItem>
-        <MenuItem onClick={closeFilterMenu}>
-          <Typography variant="body2">فلترة حسب القاعة</Typography>
-        </MenuItem>
-        <Divider />
-        <MenuItem onClick={closeFilterMenu}>
-          <Typography variant="body2" color="error">
-            إلغاء الفلترة
-          </Typography>
-        </MenuItem>
+      {/* filter pop-menu (placeholder only) */}
+      <Menu anchorEl={filterAnchor} open={Boolean(filterAnchor)} onClose={() => setFilterAnchor(null)}>
+        <MenuItem disabled>فلترة (قريباً)</MenuItem>
       </Menu>
 
-      {/* view tabs */}
-      <Box sx={{ mb: 3, borderBottom: 1, borderColor: "divider" }}>
-        <Tabs
-          value={viewType}
-          onChange={(_, v) => setViewType(v)}
-          indicatorColor="primary"
-        >
+      {/* tab view */}
+      <Box sx={{ mb: 2, borderBottom: 1, borderColor: "divider" }}>
+        <Tabs value={viewType} onChange={(_, v) => setViewType(v)} indicatorColor="primary">
           <ViewTab icon={<GridView />} label="شبكة" />
           <ViewTab icon={<ViewTimeline />} label="جدول زمني" />
         </Tabs>
       </Box>
 
-      {/* error state */}
       {isError && (
-        <Alert
-          severity="error"
-          sx={{ mb: 3 }}
-          action={
-            <Button color="inherit" size="small" onClick={refetch}>
-              إعادة المحاولة
-            </Button>
-          }
-        >
-          حدث خطأ أثناء جلب البيانات.
+        <Alert severity="error" sx={{ mb: 3 }}>
+          حدث خطأ أثناء جلب البيانات
         </Alert>
       )}
 
-      {/* main view */}
       {viewType === 0 ? (
-        <WeekGrid grouped={grouped} isLoading={isLoading || isFetching} />
+        <WeekGrid grouped={grouped} loading={isLoading || isFetching} />
       ) : (
-        <TimelineView grouped={grouped} isLoading={isLoading || isFetching} />
+        <TimelineView grouped={grouped} loading={isLoading || isFetching} />
       )}
 
-      {/* hidden printable node */}
-      <Box
-        id="print-area"
-        sx={{ position: "absolute", top: 0, left: "-10000px" }}
-      >
-        <PrintableWeek
-          grouped={grouped}
-          stageLabel={currentStageLabel}
-          weekRange={weekFormatted}
-        />
+      {/* hidden printable markup */}
+      <Box id="print-area" sx={{ position: "absolute", top: 0, left: -9999 }}>
+        <PrintableWeek grouped={grouped} weekRange={weekRange} stageName={stages.find((s) => s.id === stage)?.name || "—"} />
       </Box>
     </Container>
   );
 }
 
-/* ------------------------------------------------------------------
-   Mount with React-Query provider
------------------------------------------------------------------- */
+/* ------------------------------------------------------------------ */
+/* react-query provider wrapper                                       */
+/* ------------------------------------------------------------------ */
+
 const queryClient = new QueryClient();
 
 export default function ModernWeeklySchedule() {
