@@ -393,7 +393,7 @@ export default function ScheduleForm() {
                   direction={{ xs: "column", sm: "row" }}
                   spacing={2}
                 >
-                  <FormControl fullWidth required>
+                  {/* <FormControl fullWidth required>
                     <Autocomplete
                       options={days}
                       value={form.day_of_week || null}
@@ -402,7 +402,7 @@ export default function ScheduleForm() {
                         <TextField {...p} label="Day of Week" required />
                       )}
                     />
-                  </FormControl>
+                  </FormControl> */}
 
                   <FormControl fullWidth required>
                     <Autocomplete
@@ -422,7 +422,7 @@ export default function ScheduleForm() {
                   direction={{ xs: "column", sm: "row" }}
                   spacing={2}
                 >
-                  <TimePicker
+                  {/* <TimePicker
   ampm={true}  // Enable AM/PM format
                     minutesStep={5}
                     label="Start Time"
@@ -456,7 +456,17 @@ export default function ScheduleForm() {
                           form.end_time < form.start_time,
                       },
                     }}
-                  />
+                  /> */
+                   <TextField
+          fullWidth
+          required
+          type="number"
+          label="Weekly Duration (Hours)"
+          inputProps={{ min: 1, step: 0.5 }}
+          value={form.hours_number || ""}
+          onChange={(e) => updateForm("hours_number", e.target.value)}
+        />
+                  }
                 </Stack>
               </Stack>
             </CardContent>
