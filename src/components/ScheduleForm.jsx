@@ -33,9 +33,9 @@ import { api } from "../api";
 
 /* ------------------------------------------------------------------ */
 
-const days      = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"];
-const PAGE_SIZE = 5;           // lecturer search page size
-const DEBOUNCE  = 350;         // ms
+const days      = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"]; // (معلّقة حاليًا)
+const PAGE_SIZE = 5;    // lecturer search page size
+const DEBOUNCE  = 350;  // ms
 
 /* ---------- utils ---------- */
 function dedupeById(list) {
@@ -52,10 +52,10 @@ const LecturerInput = memo(function LecturerInput({
   id,
   lecturers,
   loading,
-  valueObject,          // <- نمرر الأوبجكت المختار مباشرة
-  inputValue,           // <- نص البحث الخاص بهذا الصف
-  onChange,             // (idx, id, object)
-  onInputChange,        // (idx, value)
+  valueObject,      // الأوبجكت المختار
+  inputValue,       // نص البحث الخاص بالسطر
+  onChange,         // (idx, id, object)
+  onInputChange,    // (idx, value)
 }) {
   return (
     <Autocomplete
@@ -63,11 +63,11 @@ const LecturerInput = memo(function LecturerInput({
       options={lecturers}
       loading={loading}
       getOptionLabel={(o) => o?.name ?? ""}
-      isOptionEqualToValue={(a, b) => a.id === b.id}
+      isOptionEqualToValue={(a, b) => a?.id === b?.id}
       value={valueObject || null}
       inputValue={inputValue}
       onInputChange={(_, val, reason) => {
-        // خفّض الضوضاء: تجاهل clear التلقائي إذا ما نحتاجه
+        // تقليل الضوضاء من reset التلقائي
         if (reason === "reset") return;
         onInputChange(idx, val);
       }}
@@ -101,12 +101,12 @@ export default function ScheduleForm() {
   const theme = useTheme();
 
   /* ---------- refs ---------- */
-  const cancelRef = useRef(null); // axios cancel token
-  const debounceRefs = useRef({}); // لكل صف تايمر خاص
+  const cancelRef = useRef(null);       // axios cancel token
+  const debounceRefs = useRef({});      // تايمر لكل صف  مهم جدا 
 
   /* ---------- data state ---------- */
   const [rooms,     setRooms]     = useState([]);
-  const [lecturers, setLecturers] = useState([]);   // options المعروضة حاليًا
+  const [lecturers, setLecturers] = useState([]);   // options الحالية
   const [stages,    setStages]    = useState([]);
 
   /* ---------- caches ---------- */
@@ -127,16 +127,16 @@ export default function ScheduleForm() {
   /* ---------- form state ---------- */
   const initialForm = {
     course_name : "",
-    day_of_week : "",
+    day_of_week : "",    
     start_time  : null,
     end_time    : null,
     room_id     : "",
     stage_id    : null,
     lecturer_ids: [null],
+    hours_number: "",     // NEW
   };
   const [form, setForm] = useState(initialForm);
 
-  // لكل صف قيمة نص البحث الخاصة به
   const [inputValues, setInputValues] = useState([""]);
 
   /* ───────────────── fetch helpers ───────────────── */
@@ -159,21 +159,19 @@ export default function ScheduleForm() {
   };
 
   const fetchLecturers = async (q = "") => {
-    if (cancelRef.current) cancelRef.current.cancel();
+    if (cancelRef.current) cancelRef.current.cancel?.();
     cancelRef.current = axios.CancelToken.source();
 
     setLoadingLecturers(true);
     try {
-      const res = await api.get(`/lecturers?search=${encodeURIComponent(q)}&limit=${PAGE_SIZE}`, {
-        cancelToken: cancelRef.current.token,
-      });
-      const fetched = res.data?.data || [];
-      // ادمج مع المختارين حتى لا يختفوا من الـ options
-      setLecturers((prev) =>
-        dedupeById([...Object.values(selectedMap), ...fetched])
+      const res = await api.get(
+        `/lecturers?search=${encodeURIComponent(q)}&limit=${PAGE_SIZE}`,
+        { cancelToken: cancelRef.current.token }
       );
+      const fetched = res.data?.data || [];
+      setLecturers((prev) => dedupeById([...Object.values(selectedMap), ...fetched]));
     } catch {
-      // cancelled or failed
+      // cancelled أو فشل
       setLecturers((prev) => dedupeById([...Object.values(selectedMap)]));
     } finally {
       setLoadingLecturers(false);
@@ -185,13 +183,12 @@ export default function ScheduleForm() {
     fetchStaticData();
     fetchLecturers(""); // أولي
     return () => {
-      if (cancelRef.current) cancelRef.current.cancel();
-      // نظف كل الديباونس
+      if (cancelRef.current) cancelRef.current.cancel?.();
       Object.values(debounceRefs.current).forEach((t) => clearTimeout(t));
     };
   }, []);
 
-  /* ───────────────── small setters ───────────────── */
+  /* ───────────────── setters ───────────────── */
   const updateForm = useCallback((field, val) => {
     setForm((prev) => ({ ...prev, [field]: val }));
   }, []);
@@ -199,16 +196,13 @@ export default function ScheduleForm() {
   const updateLecturer = useCallback((idx, id, obj) => {
     setForm((prev) => {
       const arr = [...prev.lecturer_ids];
-      arr[idx]  = id;
+      arr[idx] = id;
       return { ...prev, lecturer_ids: arr };
     });
-    // خزّن الأوبجكت المختار (لو موجود)
+
     if (obj && obj.id != null) {
       setSelectedMap((m) => ({ ...m, [obj.id]: obj }));
-      // واحرص إنو يظل ضمن الـ options
       setLecturers((prev) => dedupeById([obj, ...prev]));
-    } else if (id == null) {
-      // لا شيء
     }
   }, []);
 
@@ -230,7 +224,6 @@ export default function ScheduleForm() {
       return next;
     });
 
-    // ديباونس لكل صف لحاله
     if (debounceRefs.current[idx]) clearTimeout(debounceRefs.current[idx]);
     debounceRefs.current[idx] = setTimeout(() => {
       fetchLecturers(val.trim());
@@ -242,7 +235,11 @@ export default function ScheduleForm() {
     e.preventDefault();
 
     if (form.start_time && form.end_time && form.end_time < form.start_time) {
-      setSnackbar({ open: true, message: "End time cannot be earlier than start time", severity: "error" });
+      setSnackbar({
+        open: true,
+        message: "End time cannot be earlier than start time",
+        severity: "error",
+      });
       return;
     }
 
@@ -257,6 +254,7 @@ export default function ScheduleForm() {
       lecturer_ids: form.lecturer_ids.filter(Boolean),
       start_time  : toHM(form.start_time),
       end_time    : toHM(form.end_time),
+      hours_number: form.hours_number === "" ? null : Number(form.hours_number),
     };
 
     try {
@@ -264,10 +262,9 @@ export default function ScheduleForm() {
       setSnackbar({ open: true, message: "Lecture added successfully", severity: "success" });
       setForm(initialForm);
       setInputValues([""]);
-      // لا نمسح selectedMap؛ مو مشكلة يبقى ككاش خفيف
       fetchLecturers(""); // refresh options
     } catch (err) {
-      const msg = err.response?.data?.message || "Error adding lecture";
+      const msg = err?.response?.data?.message || "Error adding lecture";
       setSnackbar({ open: true, message: msg, severity: "error" });
     } finally {
       setIsSubmitting(false);
@@ -326,10 +323,7 @@ export default function ScheduleForm() {
           </Typography>
 
           {/* ─────────── Lecturers ─────────── */}
-          <Card
-            variant="outlined"
-            sx={{ mt: 4, borderLeft: `6px solid ${theme.palette.primary.main}` }}
-          >
+          <Card variant="outlined" sx={{ mt: 4, borderLeft: `6px solid ${theme.palette.primary.main}` }}>
             <CardContent>
               <Typography variant="h6" fontWeight={600} gutterBottom>
                 Lecturer(s) <sup style={{ color: theme.palette.error.main }}>*</sup>
@@ -366,11 +360,7 @@ export default function ScheduleForm() {
                   );
                 })}
 
-                <Button
-                  variant="outlined"
-                  startIcon={<AddCircleOutlineIcon />}
-                  onClick={addLecturer}
-                >
+                <Button variant="outlined" startIcon={<AddCircleOutlineIcon />} onClick={addLecturer}>
                   Add Lecturer
                 </Button>
               </Stack>
@@ -378,10 +368,7 @@ export default function ScheduleForm() {
           </Card>
 
           {/* ─────────── Course details ─────────── */}
-          <Card
-            variant="outlined"
-            sx={{ mt: 4, borderLeft: `6px solid ${theme.palette.secondary.main}` }}
-          >
+          <Card variant="outlined" sx={{ mt: 4, borderLeft: `6px solid ${theme.palette.secondary.main}` }}>
             <CardContent>
               <Typography variant="h6" fontWeight={600} gutterBottom>
                 Course Details
@@ -400,7 +387,8 @@ export default function ScheduleForm() {
                   <Autocomplete
                     options={stages}
                     loading={loadingStages}
-                    getOptionLabel={(o) => o.name}
+                    getOptionLabel={(o) => o?.name ?? ""}
+                    isOptionEqualToValue={(a, b) => a?.id === b?.id}
                     value={stages.find((s) => s.id === form.stage_id) || null}
                     onChange={(_, v) => updateForm("stage_id", v ? v.id : null)}
                     renderInput={(params) => (
@@ -426,58 +414,45 @@ export default function ScheduleForm() {
           </Card>
 
           {/* ─────────── Location & time ─────────── */}
-          <Card
-            variant="outlined"
-            sx={{ mt: 4, borderLeft: `6px solid ${theme.palette.info.main}` }}
-          >
+          <Card variant="outlined" sx={{ mt: 4, borderLeft: `6px solid ${theme.palette.info.main}` }}>
             <CardContent>
               <Typography variant="h6" fontWeight={600} gutterBottom>
                 Location & Time
               </Typography>
 
               <Stack spacing={3}>
-                <Stack
-                  direction={{ xs: "column", sm: "row" }}
-                  spacing={2}
-                >
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                  {/* لو تحب ترجع يوم الأسبوع، فكّ التعليق أدناه
                   <FormControl fullWidth required>
                     <Autocomplete
                       options={days}
                       value={form.day_of_week || null}
                       onChange={(_, v) => updateForm("day_of_week", v || "")}
-                      renderInput={(p) => (
-                        <TextField {...p} label="Day of Week" required />
-                      )}
+                      renderInput={(p) => <TextField {...p} label="Day of Week" required />}
                     />
                   </FormControl>
+                  */}
 
                   <FormControl fullWidth required>
                     <Autocomplete
                       options={rooms}
-                      getOptionLabel={(r) => r.room_name ?? ""}
-                      isOptionEqualToValue={(a, b) => a.id === b.id}
+                      getOptionLabel={(r) => r?.room_name ?? ""}
+                      isOptionEqualToValue={(a, b) => a?.id === b?.id}
                       value={rooms.find((r) => r.id === form.room_id) || null}
                       onChange={(_, v) => updateForm("room_id", v ? v.id : "")}
-                      renderInput={(p) => (
-                        <TextField {...p} label="Room" required />
-                      )}
+                      renderInput={(p) => <TextField {...p} label="Room" required />}
                     />
                   </FormControl>
                 </Stack>
 
-                <Stack
-                  direction={{ xs: "column", sm: "row" }}
-                  spacing={2}
-                >
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
                   <TimePicker
                     ampm
                     minutesStep={5}
                     label="Start Time"
                     value={form.start_time}
                     onChange={(v) => updateForm("start_time", v)}
-                    slotProps={{
-                      textField: { required: true, fullWidth: true },
-                    }}
+                    slotProps={{ textField: { required: true, fullWidth: true } }}
                   />
 
                   <TimePicker
@@ -492,17 +467,24 @@ export default function ScheduleForm() {
                         required: true,
                         fullWidth: true,
                         helperText:
-                          form.start_time &&
-                          form.end_time &&
-                          form.end_time < form.start_time
+                          form.start_time && form.end_time && form.end_time < form.start_time
                             ? "End must be ≥ start"
                             : "",
-                        error:
-                          form.start_time &&
-                          form.end_time &&
-                          form.end_time < form.start_time,
+                        error: Boolean(
+                          form.start_time && form.end_time && form.end_time < form.start_time
+                        ),
                       },
                     }}
+                  />
+
+                  <TextField
+                    fullWidth
+                    required
+                    type="number"
+                    label="Weekly Duration (Hours)"
+                    inputProps={{ min: 1, step: 0.5 }}
+                    value={form.hours_number}
+                    onChange={(e) => updateForm("hours_number", e.target.value)}
                   />
                 </Stack>
               </Stack>
@@ -510,11 +492,7 @@ export default function ScheduleForm() {
           </Card>
 
           {/* ─────────── Buttons ─────────── */}
-          <Stack
-            direction={{ xs: "column", sm: "row" }}
-            spacing={2}
-            sx={{ mt: 5, justifyContent: "flex-end" }}
-          >
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mt: 5, justifyContent: "flex-end" }}>
             <Button
               variant="outlined"
               color="warning"
@@ -528,13 +506,7 @@ export default function ScheduleForm() {
             <Button
               type="submit"
               variant="contained"
-              startIcon={
-                isSubmitting ? (
-                  <CircularProgress size={20} color="inherit" />
-                ) : (
-                  <AddCircleOutlineIcon />
-                )
-              }
+              startIcon={isSubmitting ? <CircularProgress size={20} color="inherit" /> : <AddCircleOutlineIcon />}
               disabled={isSubmitting}
             >
               {isSubmitting ? "Saving…" : "Save Entry"}
