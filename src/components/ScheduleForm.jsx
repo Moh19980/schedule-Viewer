@@ -246,9 +246,10 @@ export default function ScheduleForm() {
     setIsSubmitting(true);
 
     // helper to HH:MM
-    const toHM = (d) =>
-      d ? `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}` : "";
-
+   const toHM = (d) =>
+   d
+     ? `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`
+     : null;
     const payload = {
       ...form,
       lecturer_ids: form.lecturer_ids.filter(Boolean),
@@ -383,7 +384,7 @@ export default function ScheduleForm() {
                   required
                 />
 
-                <FormControl fullWidth required>
+                <FormControl fullWidth >
                   <Autocomplete
                     options={stages}
                     loading={loadingStages}
@@ -452,7 +453,7 @@ export default function ScheduleForm() {
                     label="Start Time"
                     value={form.start_time}
                     onChange={(v) => updateForm("start_time", v)}
-                    slotProps={{ textField: { required: true, fullWidth: true } }}
+                    slotProps={{ textField: {  fullWidth: true } }}
                   />
 
                   <TimePicker
@@ -464,7 +465,6 @@ export default function ScheduleForm() {
                     minTime={form.start_time || undefined}
                     slotProps={{
                       textField: {
-                        required: true,
                         fullWidth: true,
                         helperText:
                           form.start_time && form.end_time && form.end_time < form.start_time
@@ -479,7 +479,6 @@ export default function ScheduleForm() {
 
                   <TextField
                     fullWidth
-                    required
                     type="number"
                     label="Weekly Duration (Hours)"
                     inputProps={{ min: 1, step: 0.5 }}
